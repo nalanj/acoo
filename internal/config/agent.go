@@ -9,6 +9,7 @@ type Agent struct {
 	Name     string            `yaml:"name"`
 	Model    string            `yaml:"model"`
 	Provider string            `yaml:"provider"`
+	Thinking int64             `yaml:"thinking"` // Thinking budget in tokens (0 = disabled)
 	Env      map[string]string `yaml:"env"`
 	Jobs     map[string]string `yaml:"jobs"` // job name -> schedule
 

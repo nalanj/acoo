@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -190,13 +191,19 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 		env = append(env, k+"="+v)
 	}
 
-	// Run in subprocess for environment isolation
-	cmd := exec.Command(execPath, "agent",
+	// Build command with thinking budget if set
+	cmdArgs := []string{"agent",
 		"--system-prompt", systemPrompt,
 		"--task-prompt", taskPrompt,
 		"--model", r.Agent.Model,
 		"--provider", r.Agent.Provider,
-	)
+	}
+	if r.Agent.Thinking > 0 {
+		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", r.Agent.Thinking))
+	}
+
+	// Run in subprocess for environment isolation
+	cmd := exec.Command(execPath, cmdArgs...)
 	cmd.Env = env
 
 	output, err := cmd.CombinedOutput()

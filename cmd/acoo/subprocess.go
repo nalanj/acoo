@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"charm.land/fantasy"
+	"charm.land/fantasy/providers/anthropic"
 
 	"github.com/nalanj/acoo/internal/agent"
 	"github.com/nalanj/acoo/internal/provider"
@@ -36,6 +37,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	taskPrompt, _ := cmd.Flags().GetString("task-prompt")
 	model, _ := cmd.Flags().GetString("model")
 	providerName, _ := cmd.Flags().GetString("provider")
+	thinkingBudget, _ := cmd.Flags().GetInt64("thinking-budget")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
@@ -47,11 +49,26 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating provider: %w", err)
 	}
 
+	// Build agent options
+	agentOptions := []fantasy.AgentOption{
+		fantasy.WithSystemPrompt(systemPrompt),
+		fantasy.WithTools(agent.Tools()...),
+	}
+
+	// Add thinking option if configured (for anthropic-compatible providers)
+	if thinkingBudget > 0 {
+		opts := anthropic.NewProviderOptions(&anthropic.ProviderOptions{
+			Thinking: &anthropic.ThinkingProviderOption{
+				BudgetTokens: thinkingBudget,
+			},
+		})
+		agentOptions = append(agentOptions, fantasy.WithProviderOptions(opts))
+	}
+
 	// Create agent with tools
 	agentInstance := fantasy.NewAgent(
 		lm,
-		fantasy.WithSystemPrompt(systemPrompt),
-		fantasy.WithTools(agent.Tools()...),
+		agentOptions...,
 	)
 
 	// Build conversation

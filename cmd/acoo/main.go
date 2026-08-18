@@ -74,6 +74,7 @@ Example:
 	agentCmd.Flags().String("task-prompt", "", "Task prompt")
 	agentCmd.Flags().String("model", "", "Model")
 	agentCmd.Flags().String("provider", "", "Provider")
+	agentCmd.Flags().Int64("thinking-budget", 0, "Thinking budget in tokens (0 = disabled)")
 
 	providersCmd := &cobra.Command{
 		Use:   "providers",
