@@ -16,6 +16,7 @@ import (
 
 	"github.com/nalanj/acoo/internal/agent"
 	"github.com/nalanj/acoo/internal/config"
+	"github.com/nalanj/acoo/internal/provider"
 )
 
 var (
@@ -74,6 +75,12 @@ Example:
 	agentCmd.Flags().String("model", "", "Model")
 	agentCmd.Flags().String("provider", "", "Provider")
 
+	providersCmd := &cobra.Command{
+		Use:   "providers",
+		Short: "List available LLM providers",
+		RunE:  listProviders,
+	}
+
 	// Root command - use RunE instead of Run
 	root := &cobra.Command{
 		Use:          "acoo",
@@ -100,6 +107,7 @@ Example:
 	root.AddCommand(testCmd)
 	root.AddCommand(startCmd)
 	root.AddCommand(agentCmd)
+	root.AddCommand(providersCmd)
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -512,5 +520,24 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out, dash)
 
 	fmt.Fprintln(out)
+	return nil
+}
+
+func listProviders(cmd *cobra.Command, args []string) error {
+	pf := provider.NewFactory()
+	infos := pf.ListProviders()
+
+	out := cmd.OutOrStdout()
+	fmt.Fprintln(out, "Available providers:")
+	fmt.Fprintln(out)
+
+	for _, info := range infos {
+		fmt.Fprintf(out, "%-15s %s (type: %s)\n", info.ID, info.Name, info.Type)
+		if len(info.Models) > 0 {
+			fmt.Fprintf(out, "  Models: %s\n", strings.Join(info.Models, ", "))
+		}
+		fmt.Fprintln(out)
+	}
+
 	return nil
 }
