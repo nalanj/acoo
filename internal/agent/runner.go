@@ -198,8 +198,8 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 		"--model", r.Agent.Model,
 		"--provider", r.Agent.Provider,
 	}
-	if r.Agent.Thinking > 0 {
-		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", r.Agent.Thinking))
+	if thinkingBudget := r.Agent.GetThinkingBudget(); thinkingBudget > 0 {
+		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
 	}
 
 	// Run in subprocess for environment isolation
