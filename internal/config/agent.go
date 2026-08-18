@@ -6,7 +6,7 @@ import (
 )
 
 // Thinking effort levels mapped to token budgets
-var thinkingBudgets = map[string]int64{
+var ThinkingBudgets = map[string]int64{
 	"low":       10000,
 	"medium":    16000,
 	"high":      32000,
@@ -44,7 +44,7 @@ func (a *Agent) GetThinkingBudget() int64 {
 	case float64:
 		return int64(v)
 	case string:
-		if budget, ok := thinkingBudgets[v]; ok {
+		if budget, ok := ThinkingBudgets[v]; ok {
 			return budget
 		}
 		// Try parsing as number

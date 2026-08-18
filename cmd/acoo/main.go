@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
 	"github.com/nalanj/acoo/internal/agent"
@@ -82,6 +83,20 @@ Example:
 		RunE:  listProviders,
 	}
 
+	newAgentCmd := &cobra.Command{
+		Use:   "new agent",
+		Short: "Create a new agent with a TUI wizard",
+		Long:  `Create a new agent using an interactive TUI wizard.
+
+Use --from to base the new agent on an existing agent's configuration.
+
+Example:
+  acoo new agent
+  acoo new agent --from code-reviewer`,
+		RunE: runNewAgent,
+	}
+	newAgentCmd.Flags().String("from", "", "Base new agent on an existing agent")
+
 	// Root command - use RunE instead of Run
 	root := &cobra.Command{
 		Use:          "acoo",
@@ -109,6 +124,7 @@ Example:
 	root.AddCommand(startCmd)
 	root.AddCommand(agentCmd)
 	root.AddCommand(providersCmd)
+	root.AddCommand(newAgentCmd)
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -521,6 +537,33 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out, dash)
 
 	fmt.Fprintln(out)
+	return nil
+}
+
+func runNewAgent(cmd *cobra.Command, args []string) error {
+	fromName, _ := cmd.Flags().GetString("from")
+
+	var sourceAgent *config.Agent
+	if fromName != "" {
+		path := filepath.Join(agentsDir, fromName+".md")
+		var err error
+		sourceAgent, err = config.LoadAgentFile(path)
+		if err != nil {
+			return fmt.Errorf("loading source agent %s: %w", fromName, err)
+		}
+	}
+
+	m := initialModel(sourceAgent)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	if _, err := p.Run(); err != nil {
+		return fmt.Errorf("running wizard: %w", err)
+	}
+
+	if m.done && m.resultFile != "" {
+		fmt.Printf("Agent saved to: %s\n", m.resultFile)
+	}
+
 	return nil
 }
 
