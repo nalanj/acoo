@@ -227,8 +227,9 @@ func (m *AgentManager) Start(ctx context.Context) error {
 
 	// Handle file changes
 	watcher.OnChange(func(changed []string) {
-		m.mu.Lock()
-		defer m.mu.Unlock()
+		// Collect what needs to be reloaded
+		agentChanges := []string{}
+		jobChanges := []string{}
 
 		for _, c := range changed {
 			parts := strings.SplitN(c, ":", 2)
@@ -242,28 +243,26 @@ func (m *AgentManager) Start(ctx context.Context) error {
 			file := filepath.Base(path)
 			name := strings.TrimSuffix(file, ".md")
 
-			// Check if it's a job or agent file
-			isJob := dir == m.jobsDir
-
-			switch action {
-			case "added", "modified":
-				if isJob {
-					// Job changed - reload all agents that reference it
-					m.reloadAgentsWithJob(name)
-				} else {
-					// Agent changed
-					m.logger.Printf("Reloading agent: %s", name)
-					m.reloadAgent(name)
-				}
-			case "removed":
-				if isJob {
-					// Job removed - reload all agents that referenced it
-					m.reloadAgentsWithJob(name)
-				} else {
-					m.logger.Printf("Stopping agent: %s", name)
-					m.stopAgent(name)
-				}
+			if dir == m.jobsDir {
+				jobChanges = append(jobChanges, name)
+			} else if action == "removed" {
+				// Handle removals synchronously
+				m.mu.Lock()
+				m.stopAgent(name)
+				m.mu.Unlock()
+			} else {
+				agentChanges = append(agentChanges, name)
 			}
+		}
+
+		// Handle agent reloads without holding the lock
+		for _, name := range agentChanges {
+			go m.reloadAgentAsync(name)
+		}
+
+		// Handle job changes
+		for _, name := range jobChanges {
+			m.reloadAgentsWithJobAsync(name)
 		}
 	})
 
@@ -288,8 +287,10 @@ func (m *AgentManager) reloadAgents() error {
 
 // reloadAgent reloads a single agent
 func (m *AgentManager) reloadAgent(name string) {
+	m.logger.Printf("reloadAgent: starting")
 	// Stop existing runner if any
 	m.stopAgent(name)
+	m.logger.Printf("reloadAgent: stopped old runner, loading new config")
 
 	// Load the agent
 	path := filepath.Join(m.agentsDir, name+".md")
@@ -317,6 +318,40 @@ func (m *AgentManager) reloadAgent(name string) {
 	m.startAgent(agentConfig)
 }
 
+// reloadAgentAsync reloads an agent asynchronously (for hot reload)
+func (m *AgentManager) reloadAgentAsync(name string) {
+	m.logger.Printf("Reloading agent: %s", name)
+
+	// Stop existing runner if any
+	m.stopAgentLocked(name)
+
+	// Load the agent
+	path := filepath.Join(m.agentsDir, name+".md")
+	agentConfig, err := config.LoadAgentFile(path)
+	if err != nil {
+		m.logger.Printf("Failed to reload agent %s: %v", name, err)
+		return
+	}
+
+	// Load jobs
+	jobs, err := config.LoadJobs(m.jobsDir)
+	if err != nil {
+		m.logger.Printf("Failed to load jobs: %v", err)
+		return
+	}
+
+	// Link jobs
+	agentConfig.JobsMap = make(map[string]*config.Job)
+	for jobName := range agentConfig.Jobs {
+		if job, ok := jobs[jobName]; ok {
+			agentConfig.JobsMap[jobName] = job
+		}
+	}
+	m.mu.Lock()
+	m.startAgentLocked(agentConfig)
+	m.mu.Unlock()
+}
+
 // reloadAgentsWithJob reloads all agents that reference the given job
 func (m *AgentManager) reloadAgentsWithJob(jobName string) {
 	// Load all agents
@@ -329,8 +364,24 @@ func (m *AgentManager) reloadAgentsWithJob(jobName string) {
 	// Find agents that reference this job
 	for _, a := range agents {
 		if _, refsJob := a.Jobs[jobName]; refsJob {
-			m.logger.Printf("Reloading agent %s (job %s changed)", a.Name, jobName)
 			m.reloadAgent(a.Name)
+		}
+	}
+}
+
+// reloadAgentsWithJobAsync reloads all agents that reference the given job
+func (m *AgentManager) reloadAgentsWithJobAsync(jobName string) {
+	// Load all agents
+	agents, err := config.LoadAgents(m.agentsDir)
+	if err != nil {
+		m.logger.Printf("Failed to load agents: %v", err)
+		return
+	}
+
+	// Find agents that reference this job
+	for _, a := range agents {
+		if _, refsJob := a.Jobs[jobName]; refsJob {
+			go m.reloadAgentAsync(a.Name)
 		}
 	}
 }
@@ -365,11 +416,24 @@ func (m *AgentManager) startAgent(a *config.Agent) {
 	m.mu.Unlock()
 }
 
+// startAgentLocked starts an agent runner (caller must hold mutex)
+func (m *AgentManager) startAgentLocked(a *config.Agent) {
+	logger := log.New(os.Stdout, fmt.Sprintf("[%s] ", a.Name), 0)
+	runner := agent.NewRunner(a, logger)
+
+	m.runners[a.Name] = runner
+	runner.Start(m.ctx)
+}
+
 // stopAgent stops an agent runner (does not wait for completion)
 func (m *AgentManager) stopAgent(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.stopAgentLocked(name)
+}
 
+// stopAgentLocked stops an agent runner (caller must hold mutex)
+func (m *AgentManager) stopAgentLocked(name string) {
 	runner, exists := m.runners[name]
 	if !exists {
 		return
