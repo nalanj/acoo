@@ -83,8 +83,14 @@ Example:
 		RunE:  listProviders,
 	}
 
+	// New command group
+	newCmd := &cobra.Command{
+		Use:   "new",
+		Short: "Create new resources",
+	}
+
 	newAgentCmd := &cobra.Command{
-		Use:   "new agent",
+		Use:   "agent",
 		Short: "Create a new agent with a TUI wizard",
 		Long:  `Create a new agent using an interactive TUI wizard.
 
@@ -95,10 +101,18 @@ Example:
   acoo new agent --from code-reviewer`,
 		RunE: runNewAgent,
 	}
+
+	newCmd.AddCommand(newAgentCmd)
 	newAgentCmd.Flags().String("from", "", "Base new agent on an existing agent")
 
+	// Edit command group
+	editCmd := &cobra.Command{
+		Use:   "edit",
+		Short: "Edit existing resources",
+	}
+
 	editAgentCmd := &cobra.Command{
-		Use:   "edit agent <name>",
+		Use:   "agent <name>",
 		Short: "Edit an existing agent with a TUI wizard",
 		Long:  `Edit an existing agent using an interactive TUI wizard.
 
@@ -107,6 +121,8 @@ Example:
 		Args: cobra.ExactArgs(1),
 		RunE: runEditAgent,
 	}
+
+	editCmd.AddCommand(editAgentCmd)
 
 	// Root command - use RunE instead of Run
 	root := &cobra.Command{
@@ -135,8 +151,8 @@ Example:
 	root.AddCommand(startCmd)
 	root.AddCommand(agentCmd)
 	root.AddCommand(providersCmd)
-	root.AddCommand(newAgentCmd)
-	root.AddCommand(editAgentCmd)
+	root.AddCommand(newCmd)
+	root.AddCommand(editCmd)
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
