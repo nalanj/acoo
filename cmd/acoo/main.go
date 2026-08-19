@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
@@ -551,13 +552,45 @@ func testAgent(cmd *cobra.Command, args []string) error {
 
 	proc := exec.Command(execPath, cmdArgs...)
 	proc.Env = env
-	proc.Stdout = out
-	proc.Stderr = out
-	if err := proc.Run(); err != nil {
+	stdout, err := proc.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("creating stdout pipe: %w", err)
+	}
+	stderr, err := proc.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("creating stderr pipe: %w", err)
+	}
+
+	if err := proc.Start(); err != nil {
+		return fmt.Errorf("starting process: %w", err)
+	}
+
+	// Copy stdout, filtering out DONE marker
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if line == "<<<<<DONE>>>>>" {
+				continue
+			}
+			fmt.Fprintln(out, line)
+		}
+	}()
+
+	// Copy stderr
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			fmt.Fprintln(out, scanner.Text())
+		}
+	}()
+
+	if err := proc.Wait(); err != nil {
 		return fmt.Errorf("job execution: %w", err)
 	}
 
 	fmt.Fprintln(out)
+	fmt.Fprintf(out, "%s\n", styleOK.Render("✓ Done"))
 
 	return nil
 }
