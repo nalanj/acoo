@@ -338,10 +338,23 @@ func (m *AgentManager) reloadAgentsWithJob(jobName string) {
 // startAgent starts an agent runner
 func (m *AgentManager) startAgent(a *config.Agent) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
-	if _, exists := m.runners[a.Name]; exists {
-		return // Already running
+	// If runner exists, wait for it to finish (it might be stopping from a reload)
+	if existing, exists := m.runners[a.Name]; exists {
+		m.mu.Unlock()
+		existing.Stop()
+		// Wait with timeout
+		done := make(chan struct{})
+		go func() {
+			existing.Wait()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			fmt.Printf("Warning: previous agent %s shutdown timed out\n", a.Name)
+		}
+		m.mu.Lock()
 	}
 
 	logger := log.New(os.Stdout, fmt.Sprintf("[%s] ", a.Name), 0)
@@ -349,6 +362,7 @@ func (m *AgentManager) startAgent(a *config.Agent) {
 
 	m.runners[a.Name] = runner
 	runner.Start(m.ctx)
+	m.mu.Unlock()
 }
 
 // stopAgent stops an agent runner (does not wait for completion)

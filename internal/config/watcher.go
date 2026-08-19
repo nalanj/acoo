@@ -104,11 +104,20 @@ func (w *Watcher) handleEvent(event fsnotify.Event, logger *log.Logger) {
 	changed := []string{}
 
 	switch {
+	case event.Has(fsnotify.Chmod):
+		// Treat chmod as modified (touch causes chmod)
+		if w.knownFiles[event.Name] {
+			changed = append(changed, "modified:"+event.Name)
+		}
+
 	case event.Has(fsnotify.Create):
 		if !w.knownFiles[event.Name] {
 			w.knownFiles[event.Name] = true
 			changed = append(changed, "added:"+event.Name)
 			logger.Printf("Agent added: %s", filepath.Base(filepath.Dir(event.Name)))
+		} else {
+			// File already known but got recreated (e.g., sed -i)
+			changed = append(changed, "modified:"+event.Name)
 		}
 
 	case event.Has(fsnotify.Remove):
@@ -122,6 +131,7 @@ func (w *Watcher) handleEvent(event fsnotify.Event, logger *log.Logger) {
 		// File was modified - treat as changed
 		if w.knownFiles[event.Name] {
 			changed = append(changed, "modified:"+event.Name)
+			logger.Printf("File modified: %s", event.Name)
 		}
 	}
 
