@@ -427,12 +427,16 @@ func validateAgents(cmd *cobra.Command, args []string) error {
 		}
 
 		// Validate job references exist and have required fields
-		for _, jobName := range a.Jobs {
+		for jobName, schedule := range a.Jobs {
 			job, ok := jobs[jobName]
 			if !ok {
 				fmt.Fprintf(out, "✗ %s: references unknown job %s\n", a.Name, jobName)
 				validationErrors++
 				continue
+			}
+			if schedule == "" {
+				fmt.Fprintf(out, "✗ %s.%s: missing schedule\n", a.Name, jobName)
+				validationErrors++
 			}
 			if job.Provider == "" {
 				fmt.Fprintf(out, "✗ %s.%s: missing provider\n", a.Name, jobName)
@@ -440,10 +444,6 @@ func validateAgents(cmd *cobra.Command, args []string) error {
 			}
 			if job.Model == "" {
 				fmt.Fprintf(out, "✗ %s.%s: missing model\n", a.Name, jobName)
-				validationErrors++
-			}
-			if job.Schedule == "" {
-				fmt.Fprintf(out, "✗ %s.%s: missing schedule\n", a.Name, jobName)
 				validationErrors++
 			}
 		}
@@ -473,13 +473,7 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if agent references this job
-	found := false
-	for _, jn := range agentConfig.Jobs {
-		if jn == jobName {
-			found = true
-			break
-		}
-	}
+	schedule, found := agentConfig.Jobs[jobName]
 	if !found {
 		return fmt.Errorf("agent '%s' does not reference job '%s'", agentName, jobName)
 	}
@@ -519,6 +513,7 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out, sep)
 	fmt.Fprintf(out, "Agent: %s\n", agentConfig.Name)
 	fmt.Fprintf(out, "Job: %s\n", job.Name)
+	fmt.Fprintf(out, "Schedule: %s\n", schedule)
 	fmt.Fprintf(out, "Provider: %s, Model: %s\n", job.Provider, job.Model)
 	fmt.Fprintln(out, sep)
 

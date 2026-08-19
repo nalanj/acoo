@@ -49,9 +49,9 @@ func (r *Runner) Start(ctx context.Context) {
 
 	r.Logger.Printf("Agent started with %d jobs", len(r.Agent.JobsMap))
 
-	// Parse schedules for each job
-	for jobName, job := range r.Agent.JobsMap {
-		sched, err := scheduler.Parse(job.Schedule)
+	// Parse schedules for each job (schedule is on agent)
+	for jobName, schedule := range r.Agent.Jobs {
+		sched, err := scheduler.Parse(schedule)
 		if err != nil {
 			r.Logger.Printf("Invalid schedule for %s: %v", jobName, err)
 			continue

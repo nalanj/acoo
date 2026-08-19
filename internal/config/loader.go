@@ -29,7 +29,7 @@ func LoadAll(agentsDir, jobsDir string) ([]*Agent, map[string]*Job, error) {
 	// Link jobs to agents
 	for _, agent := range agents {
 		agent.JobsMap = make(map[string]*Job)
-		for _, jobName := range agent.Jobs {
+		for jobName := range agent.Jobs {
 			if job, ok := jobs[jobName]; ok {
 				agent.JobsMap[jobName] = job
 			}
@@ -192,13 +192,13 @@ func ListAgents(agentsDir, jobsDir string) ([]AgentInfo, error) {
 	var infos []AgentInfo
 	for _, a := range agents {
 		var jobs []string
-		for _, jobName := range a.Jobs {
+		for jobName, schedule := range a.Jobs {
 			if job, ok := a.JobsMap[jobName]; ok {
 				model := job.Model
 				if model != "" {
-					jobs = append(jobs, fmt.Sprintf("%s: %s (model: %s, provider: %s)", jobName, job.Schedule, model, job.Provider))
+					jobs = append(jobs, fmt.Sprintf("%s: %s (model: %s, provider: %s)", jobName, schedule, model, job.Provider))
 				} else {
-					jobs = append(jobs, fmt.Sprintf("%s: %s (provider: %s)", jobName, job.Schedule, job.Provider))
+					jobs = append(jobs, fmt.Sprintf("%s: %s (provider: %s)", jobName, schedule, job.Provider))
 				}
 			} else {
 				jobs = append(jobs, fmt.Sprintf("%s: <not found>", jobName))
