@@ -196,19 +196,18 @@ func ListAgents(agentsDir, jobsDir string) ([]AgentInfo, error) {
 			if job, ok := a.JobsMap[jobName]; ok {
 				model := job.Model
 				if model != "" {
-					jobs = append(jobs, fmt.Sprintf("%s: %s (model: %s)", jobName, job.Schedule, model))
+					jobs = append(jobs, fmt.Sprintf("%s: %s (model: %s, provider: %s)", jobName, job.Schedule, model, job.Provider))
 				} else {
-					jobs = append(jobs, fmt.Sprintf("%s: %s", jobName, job.Schedule))
+					jobs = append(jobs, fmt.Sprintf("%s: %s (provider: %s)", jobName, job.Schedule, job.Provider))
 				}
 			} else {
 				jobs = append(jobs, fmt.Sprintf("%s: <not found>", jobName))
 			}
 		}
 		infos = append(infos, AgentInfo{
-			Name:     a.Name,
-			Provider: a.Provider,
-			Jobs:     jobs,
-			Source:   a.SourceFile,
+			Name:   a.Name,
+			Jobs:   jobs,
+			Source: a.SourceFile,
 		})
 	}
 
@@ -217,8 +216,7 @@ func ListAgents(agentsDir, jobsDir string) ([]AgentInfo, error) {
 
 // AgentInfo represents basic agent info for listing
 type AgentInfo struct {
-	Name     string
-	Provider string
-	Jobs     []string
-	Source   string
+	Name   string
+	Jobs   []string
+	Source string
 }

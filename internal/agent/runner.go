@@ -226,7 +226,7 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 		"--system-prompt", systemPrompt,
 		"--task-prompt", taskPrompt,
 		"--model", job.Model,
-		"--provider", r.Agent.Provider,
+		"--provider", job.Provider,
 	}
 	if thinkingBudget := job.GetThinkingBudget(); thinkingBudget > 0 {
 		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))

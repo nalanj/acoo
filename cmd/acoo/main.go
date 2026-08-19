@@ -361,7 +361,6 @@ func listAgents(cmd *cobra.Command, args []string) error {
 
 	for _, info := range infos {
 		fmt.Fprintf(out, "Agent: %s\n", info.Name)
-		fmt.Fprintf(out, "  Provider: %s\n", info.Provider)
 		fmt.Fprintf(out, "  Source: %s\n", info.Source)
 		if len(info.Jobs) > 0 {
 			fmt.Fprintln(out, "  Jobs:")
@@ -421,10 +420,6 @@ func validateAgents(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(out, "✗ %s: missing name\n", a.SourceFile)
 			validationErrors++
 		}
-		if a.Provider == "" {
-			fmt.Fprintf(out, "✗ %s: missing provider\n", a.Name)
-			validationErrors++
-		}
 		if len(a.Jobs) == 0 {
 			fmt.Fprintf(out, "✗ %s: no jobs defined\n", a.Name)
 			validationErrors++
@@ -437,6 +432,10 @@ func validateAgents(cmd *cobra.Command, args []string) error {
 				fmt.Fprintf(out, "✗ %s: references unknown job %s\n", a.Name, jobName)
 				validationErrors++
 				continue
+			}
+			if job.Provider == "" {
+				fmt.Fprintf(out, "✗ %s.%s: missing provider\n", a.Name, jobName)
+				validationErrors++
 			}
 			if job.Model == "" {
 				fmt.Fprintf(out, "✗ %s.%s: missing model\n", a.Name, jobName)
@@ -500,8 +499,8 @@ func testAgent(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintln(out, sep)
 	fmt.Fprintf(out, "Agent: %s\n", agentConfig.Name)
-	fmt.Fprintf(out, "Provider: %s\n", agentConfig.Provider)
 	fmt.Fprintf(out, "Job: %s\n", job.Name)
+	fmt.Fprintf(out, "Provider: %s\n", job.Provider)
 	fmt.Fprintf(out, "Model: %s\n", job.Model)
 	fmt.Fprintf(out, "Schedule: %s\n", job.Schedule)
 	if len(agentConfig.Env) > 0 {
@@ -532,7 +531,7 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out, dash)
 	fmt.Fprintln(out, "1. Combine system prompt + task prompt")
 	fmt.Fprintln(out, "2. Call LLM in loop until '<<<<<DONE>>>>>'")
-	fmt.Fprintf(out, "3. Provider: %s, Model: %s\n", agentConfig.Provider, job.Model)
+	fmt.Fprintf(out, "3. Provider: %s, Model: %s\n", job.Provider, job.Model)
 	fmt.Fprintln(out, dash)
 
 	fmt.Fprintln(out)

@@ -5,6 +5,7 @@ import "strconv"
 // Job represents a job definition
 type Job struct {
 	Name          string            `yaml:"name"`
+	Provider     string            `yaml:"provider"`
 	Schedule     string            `yaml:"schedule"`
 	Model        string            `yaml:"model"`
 	Thinking      any               `yaml:"thinking"` // Token budget (int) or effort level
