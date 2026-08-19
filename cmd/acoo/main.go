@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"strings"
@@ -497,44 +498,77 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	sep := strings.Repeat("=", 60)
 	dash := strings.Repeat("-", 30)
 
+	// Run preconditions
+	if len(job.Preconditions) > 0 {
+		fmt.Fprintln(out, sep)
+		fmt.Fprintln(out, "# PRECONDITIONS")
+		fmt.Fprintln(out, dash)
+		for _, prec := range job.Preconditions {
+			fmt.Fprintf(out, "Running: %s\n", prec)
+			execOut, err := exec.Command("sh", "-c", prec).CombinedOutput()
+			if err != nil {
+				fmt.Fprintf(out, "FAILED: %s\n", string(execOut))
+				return fmt.Errorf("precondition failed: %s", prec)
+			}
+			fmt.Fprintf(out, "OK\n")
+		}
+		fmt.Fprintln(out)
+	}
+
+	// Show config summary
 	fmt.Fprintln(out, sep)
 	fmt.Fprintf(out, "Agent: %s\n", agentConfig.Name)
 	fmt.Fprintf(out, "Job: %s\n", job.Name)
-	fmt.Fprintf(out, "Provider: %s\n", job.Provider)
-	fmt.Fprintf(out, "Model: %s\n", job.Model)
-	fmt.Fprintf(out, "Schedule: %s\n", job.Schedule)
-	if len(agentConfig.Env) > 0 {
-		fmt.Fprintln(out, "Agent Environment:")
-		for k, v := range agentConfig.Env {
-			fmt.Fprintf(out, "  %s=%s\n", k, v)
-		}
-	}
-	if len(job.Env) > 0 {
-		fmt.Fprintln(out, "Job Environment:")
-		for k, v := range job.Env {
-			fmt.Fprintf(out, "  %s=%s\n", k, v)
-		}
-	}
-	fmt.Fprintln(out, dash)
-
-	fmt.Fprintln(out, "\n# SYSTEM PROMPT")
-	fmt.Fprintln(out, dash)
-	fmt.Fprintln(out, agentConfig.Body)
-
+	fmt.Fprintf(out, "Provider: %s, Model: %s\n", job.Provider, job.Model)
 	fmt.Fprintln(out, sep)
-	fmt.Fprintln(out, "\n# TASK PROMPT")
-	fmt.Fprintln(out, dash)
-	fmt.Fprintln(out, job.Body)
 
-	fmt.Fprintln(out, sep)
-	fmt.Fprintln(out, "\n# EXECUTION")
+	// Build environment
+	env := os.Environ()
+	for k, v := range agentConfig.Env {
+		env = append(env, k+"="+v)
+	}
+	for k, v := range job.Env {
+		env = append(env, k+"="+v)
+	}
+
+	// Find the acoo binary path
+	execPath, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("finding executable: %w", err)
+	}
+
+	// Build command
+	systemPrompt := agentConfig.Body
+	if systemPrompt == "" {
+		systemPrompt = "You are a helpful AI assistant."
+	}
+
+	cmdArgs := []string{"agent",
+		"--system-prompt", systemPrompt,
+		"--task-prompt", job.Body,
+		"--model", job.Model,
+		"--provider", job.Provider,
+	}
+	if thinkingBudget := job.GetThinkingBudget(); thinkingBudget > 0 {
+		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
+	}
+
+	fmt.Fprintln(out, "# RUNNING")
 	fmt.Fprintln(out, dash)
-	fmt.Fprintln(out, "1. Combine system prompt + task prompt")
-	fmt.Fprintln(out, "2. Call LLM in loop until '<<<<<DONE>>>>>'")
-	fmt.Fprintf(out, "3. Provider: %s, Model: %s\n", job.Provider, job.Model)
-	fmt.Fprintln(out, dash)
+
+	// Execute
+	proc := exec.Command(execPath, cmdArgs...)
+	proc.Env = env
+	proc.Stdout = out
+	proc.Stderr = out
+	if err := proc.Run(); err != nil {
+		return fmt.Errorf("job execution: %w", err)
+	}
 
 	fmt.Fprintln(out)
+	fmt.Fprintln(out, sep)
+	fmt.Fprintln(out, "Done.")
+
 	return nil
 }
 
