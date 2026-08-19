@@ -109,7 +109,6 @@ func (w *Watcher) handleEvent(event fsnotify.Event, logger *log.Logger) {
 
 	switch {
 	case event.Has(fsnotify.Chmod):
-		// Treat chmod as modified (touch causes chmod)
 		if w.knownFiles[event.Name] {
 			w.pending[event.Name] = append(w.pending[event.Name], "modified")
 			w.scheduleDebounce()
@@ -134,7 +133,6 @@ func (w *Watcher) handleEvent(event fsnotify.Event, logger *log.Logger) {
 		}
 
 	case event.Has(fsnotify.Write):
-		// File was modified - treat as changed
 		if w.knownFiles[event.Name] {
 			w.pending[event.Name] = append(w.pending[event.Name], "modified")
 			w.scheduleDebounce()
