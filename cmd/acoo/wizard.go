@@ -132,6 +132,89 @@ func initialModel(sourceAgent *config.Agent) *wizardModel {
 	return m
 }
 
+// initialEditModel creates a wizard for editing an existing agent
+func initialEditModel(agent *config.Agent) *wizardModel {
+	pf := provider.NewFactory()
+	providerInfos := pf.ListProviders()
+
+	providers := make([]string, len(providerInfos))
+	providerNames := make([]string, len(providerInfos))
+	for i, p := range providerInfos {
+		providers[i] = p.ID
+		providerNames[i] = p.Name
+	}
+
+	// Get first job name and schedule
+	var firstJobName, firstJobSchedule string
+	for name, schedule := range agent.Jobs {
+		firstJobName = name
+		firstJobSchedule = schedule
+		break
+	}
+
+	m := &wizardModel{
+		totalSteps:    8,
+		providers:     providers,
+		providerNames: providerNames,
+		models:        []string{},
+		thinkingOpts:  []string{"disabled", "low", "medium", "high", "very_high", "max"},
+		envVars:      make(map[string]string),
+	}
+
+	// Pre-fill all fields from existing agent
+	m.name = agent.Name
+	m.provider = agent.Provider
+	m.model = agent.Model
+	m.thinking = thinkingToOption(agent.GetThinkingBudget())
+	m.systemPrompt = agent.Body
+	m.jobName = firstJobName
+	m.jobSchedule = firstJobSchedule
+	m.resultFile = filepath.Join(agentsDir, agent.Name+".md")
+
+	// Initialize text inputs with existing values
+	m.nameInput = textinput.New()
+	m.nameInput.Placeholder = "my-agent"
+	m.nameInput.SetValue(m.name)
+	m.nameInput.Focus()
+
+	m.promptInput = textinput.New()
+	m.promptInput.Placeholder = "You are a helpful AI assistant."
+	m.promptInput.SetValue(m.systemPrompt)
+
+	m.jobNameInput = textinput.New()
+	m.jobNameInput.Placeholder = "default"
+	m.jobNameInput.SetValue(m.jobName)
+
+	m.jobScheduleInput = textinput.New()
+	m.jobScheduleInput.Placeholder = "@every 30s"
+	m.jobScheduleInput.SetValue(m.jobSchedule)
+
+	m.envKeyInput = textinput.New()
+	m.envKeyInput.Placeholder = "ENV_VAR_NAME"
+
+	m.envValueInput = textinput.New()
+	m.envValueInput.Placeholder = "value (will not be echoed)"
+	m.envValueInput.EchoMode = textinput.EchoNone
+
+	// Copy env vars (hidden by default)
+	for k, v := range agent.Env {
+		m.envVars[k] = v
+	}
+	m.updateEnvVarKeys()
+
+	// Set current selection to match provider
+	for i, p := range m.providers {
+		if p == m.provider {
+			m.currentSelection = i
+			break
+		}
+	}
+
+	m.updateModelsForProvider()
+
+	return m
+}
+
 func (m *wizardModel) updateEnvVarKeys() {
 	m.envVarKeys = make([]string, 0, len(m.envVars))
 	for k := range m.envVars {
@@ -361,7 +444,12 @@ func (m *wizardModel) saveAgent() tea.Msg {
 	}
 
 	content := formatAgentMarkdown(agent)
-	filename := filepath.Join(agentsDir, m.name+".md")
+
+	// Use resultFile if set (edit mode), otherwise construct from name (new mode)
+	filename := m.resultFile
+	if filename == "" {
+		filename = filepath.Join(agentsDir, m.name+".md")
+	}
 
 	if err := os.WriteFile(filename, []byte(content), 0644); err != nil {
 		return fmt.Errorf("writing file: %w", err)
