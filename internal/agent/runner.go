@@ -83,20 +83,11 @@ func (r *Runner) Stop() {
 		cancel()
 	}
 	r.mu.Unlock()
+}
 
-	// Wait with timeout to avoid hanging forever
-	done := make(chan struct{})
-	go func() {
-		r.wg.Wait()
-		close(done)
-	}()
-
-	select {
-	case <-done:
-		// All goroutines finished
-	case <-time.After(5 * time.Second):
-		r.Logger.Printf("Warning: graceful shutdown timed out")
-	}
+// Wait waits for all goroutines to finish (call after Stop)
+func (r *Runner) Wait() {
+	r.wg.Wait()
 }
 
 // runJob runs a single job on its schedule

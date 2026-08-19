@@ -351,7 +351,7 @@ func (m *AgentManager) startAgent(a *config.Agent) {
 	runner.Start(m.ctx)
 }
 
-// stopAgent stops an agent runner
+// stopAgent stops an agent runner (does not wait for completion)
 func (m *AgentManager) stopAgent(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -368,8 +368,6 @@ func (m *AgentManager) stopAgent(name string) {
 // Stop stops the agent manager
 func (m *AgentManager) Stop() {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	if m.watcher != nil {
 		m.watcher.Close()
 	}
@@ -377,9 +375,26 @@ func (m *AgentManager) Stop() {
 		m.cancel()
 	}
 
-	for name, runner := range m.runners {
+	// Take ownership of runners
+	runners := m.runners
+	m.runners = make(map[string]*agent.Runner)
+	m.mu.Unlock()
+
+	// Stop all runners and wait for them
+	for name, runner := range runners {
 		runner.Stop()
-		delete(m.runners, name)
+		// Wait with timeout
+		done := make(chan struct{})
+		go func() {
+			runner.Wait()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			fmt.Printf("Warning: agent %s shutdown timed out\n", name)
+		}
 	}
 }
 
