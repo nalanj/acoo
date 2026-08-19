@@ -482,12 +482,6 @@ func testAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading agent %s: %w", agentName, err)
 	}
 
-	// Check if agent references this job
-	schedule, found := agentConfig.Jobs[jobName]
-	if !found {
-		return fmt.Errorf("agent '%s' does not reference job '%s'", agentName, jobName)
-	}
-
 	// Load the job
 	jobs, err := config.LoadJobs(jobsDir)
 	if err != nil {
@@ -498,11 +492,19 @@ func testAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("job '%s' not found", jobName)
 	}
 
+	// Check if agent references this job
+	schedule, found := agentConfig.Jobs[jobName]
+
 	out := cmd.OutOrStdout()
 
 	// Header
 	fmt.Fprintf(out, "%s Running %s/%s\n", styleCyan.Render("→"), styleBold.Render(agentName), styleBold.Render(jobName))
-	fmt.Fprintf(out, "%s %s · %s\n\n", styleDim.Render(schedule), job.Provider, job.Model)
+
+	if found {
+		fmt.Fprintf(out, "%s %s · %s\n\n", styleDim.Render(schedule), job.Provider, job.Model)
+	} else {
+		fmt.Fprintf(out, "%s · %s %s\n\n", job.Provider, job.Model, styleDim.Render("(not configured)"))
+	}
 
 	// Run preconditions
 	if len(job.Preconditions) > 0 {
