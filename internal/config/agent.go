@@ -1,17 +1,5 @@
 package config
 
-import "time"
-
-// Thinking effort levels mapped to token budgets
-var ThinkingBudgets = map[string]int64{
-	"low":       10000,
-	"medium":    16000,
-	"high":      32000,
-	"very_high": 64000,
-	"veryhigh":  64000,
-	"max":       100000,
-}
-
 // Agent represents an agent configuration
 type Agent struct {
 	Env      map[string]string `yaml:"env"`
@@ -28,25 +16,3 @@ type Agent struct {
 func (a *Agent) GetEnv() map[string]string {
 	return a.Env
 }
-
-// Tool represents a tool in the agent config
-type Tool struct {
-	Type      ToolType
-	Name      string
-	Content   string
-	RawBlock  string
-	LineNum   int
-}
-
-// ToolType defines the type of tool
-type ToolType string
-
-const (
-	ToolTypePickup  ToolType = "pickup"
-	ToolTypeProcess ToolType = "process"
-	ToolTypeBash    ToolType = "bash"
-	ToolTypeGeneric ToolType = "tool"
-)
-
-// CommandTimeout is the default timeout for agent commands
-const CommandTimeout = 5 * time.Minute

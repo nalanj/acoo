@@ -17,6 +17,8 @@ func Tools() []fantasy.AgentTool {
 		ReadFileTool(),
 		EditFileTool(),
 		BashTool(),
+		GlobTool(),
+		ListDirTool(),
 	}
 }
 
