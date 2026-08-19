@@ -547,6 +547,8 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	}
 
 	// Execute
+	fmt.Fprintf(out, "\n%s\n\n", styleDim.Render("─────────────────────────────────────────────────────"))
+
 	proc := exec.Command(execPath, cmdArgs...)
 	proc.Env = env
 	proc.Stdout = out
