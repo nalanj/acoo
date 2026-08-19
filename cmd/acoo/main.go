@@ -361,7 +361,6 @@ func listAgents(cmd *cobra.Command, args []string) error {
 
 	for _, info := range infos {
 		fmt.Fprintf(out, "Agent: %s\n", info.Name)
-		fmt.Fprintf(out, "  Model: %s\n", info.Model)
 		fmt.Fprintf(out, "  Provider: %s\n", info.Provider)
 		fmt.Fprintf(out, "  Source: %s\n", info.Source)
 		if len(info.Jobs) > 0 {
@@ -422,10 +421,6 @@ func validateAgents(cmd *cobra.Command, args []string) error {
 			fmt.Fprintf(out, "✗ %s: missing name\n", a.SourceFile)
 			validationErrors++
 		}
-		if a.Model == "" {
-			fmt.Fprintf(out, "✗ %s: missing model\n", a.Name)
-			validationErrors++
-		}
 		if a.Provider == "" {
 			fmt.Fprintf(out, "✗ %s: missing provider\n", a.Name)
 			validationErrors++
@@ -433,6 +428,18 @@ func validateAgents(cmd *cobra.Command, args []string) error {
 		if len(a.Jobs) == 0 {
 			fmt.Fprintf(out, "✗ %s: no jobs defined\n", a.Name)
 			validationErrors++
+		}
+
+		// Validate jobs have model and schedule
+		for jobName, job := range a.Jobs {
+			if job.Model == "" {
+				fmt.Fprintf(out, "✗ %s.%s: missing model\n", a.Name, jobName)
+				validationErrors++
+			}
+			if job.Schedule == "" {
+				fmt.Fprintf(out, "✗ %s.%s: missing schedule\n", a.Name, jobName)
+				validationErrors++
+			}
 		}
 
 		// Check job references
@@ -467,23 +474,18 @@ func testAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("loading agent %s: %w", agentName, err)
 	}
 
-	// Load jobs
+	// Check if agent references this job
+	jobConfig, ok := agentConfig.Jobs[jobName]
+	if !ok {
+		return fmt.Errorf("agent '%s' does not reference job '%s'", agentName, jobName)
+	}
+
+	// Load external job file if exists (for body)
 	jobs, err := config.LoadJobs(jobsDir)
 	if err != nil {
 		return fmt.Errorf("loading jobs: %w", err)
 	}
-
-	// Find the job
-	job, ok := jobs[jobName]
-	if !ok {
-		return fmt.Errorf("job '%s' not found", jobName)
-	}
-
-	// Check if agent references this job
-	schedule, ok := agentConfig.Jobs[jobName]
-	if !ok {
-		return fmt.Errorf("agent '%s' does not reference job '%s'", agentName, jobName)
-	}
+	externalJob := jobs[jobName]
 
 	out := cmd.OutOrStdout()
 	sep := strings.Repeat("=", 60)
@@ -491,10 +493,10 @@ func testAgent(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintln(out, sep)
 	fmt.Fprintf(out, "Agent: %s\n", agentConfig.Name)
-	fmt.Fprintf(out, "Model: %s\n", agentConfig.Model)
 	fmt.Fprintf(out, "Provider: %s\n", agentConfig.Provider)
 	fmt.Fprintf(out, "Job: %s\n", jobName)
-	fmt.Fprintf(out, "Schedule: %s\n", schedule)
+	fmt.Fprintf(out, "Model: %s\n", jobConfig.Model)
+	fmt.Fprintf(out, "Schedule: %s\n", jobConfig.Schedule)
 	if len(agentConfig.Env) > 0 {
 		fmt.Fprintln(out, "Environment:")
 		for k, v := range agentConfig.Env {
@@ -510,14 +512,20 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out, sep)
 	fmt.Fprintln(out, "\n# TASK PROMPT")
 	fmt.Fprintln(out, dash)
-	fmt.Fprintln(out, job.Body)
+	if jobConfig.Prompt != "" {
+		fmt.Fprintln(out, jobConfig.Prompt)
+	} else if externalJob != nil {
+		fmt.Fprintln(out, externalJob.Body)
+	} else {
+		fmt.Fprintln(out, "(no prompt defined)")
+	}
 
 	fmt.Fprintln(out, sep)
 	fmt.Fprintln(out, "\n# EXECUTION")
 	fmt.Fprintln(out, dash)
 	fmt.Fprintln(out, "1. Combine system prompt + task prompt")
 	fmt.Fprintln(out, "2. Call LLM in loop until '<<<<<DONE>>>>>'")
-	fmt.Fprintf(out, "3. Provider: %s, Model: %s\n", agentConfig.Provider, agentConfig.Model)
+	fmt.Fprintf(out, "3. Provider: %s, Model: %s\n", agentConfig.Provider, jobConfig.Model)
 	fmt.Fprintln(out, dash)
 
 	fmt.Fprintln(out)

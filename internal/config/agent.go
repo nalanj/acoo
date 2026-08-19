@@ -1,9 +1,6 @@
 package config
 
-import (
-	"strconv"
-	"time"
-)
+import "time"
 
 // Thinking effort levels mapped to token budgets
 var ThinkingBudgets = map[string]int64{
@@ -18,41 +15,14 @@ var ThinkingBudgets = map[string]int64{
 // Agent represents an agent configuration
 type Agent struct {
 	Name     string            `yaml:"name"`
-	Model    string            `yaml:"model"`
 	Provider string            `yaml:"provider"`
-	Thinking any               `yaml:"thinking"` // Token budget (int) or effort level (string: low, medium, high, very_high, max)
 	Env      map[string]string `yaml:"env"`
-	Jobs     map[string]string `yaml:"jobs"` // job name -> schedule
+	Jobs     map[string]*JobConfig `yaml:"jobs"` // job name -> job config
 
 	SourceFile string `yaml:"-"`
 	Body      string `yaml:"-"` // The system prompt
 
-	JobsMap map[string]*Job `yaml:"-"` // Resolved job objects
-}
-
-// GetThinkingBudget returns the thinking budget in tokens
-func (a *Agent) GetThinkingBudget() int64 {
-	if a.Thinking == nil {
-		return 0
-	}
-
-	switch v := a.Thinking.(type) {
-	case int:
-		return int64(v)
-	case int64:
-		return v
-	case float64:
-		return int64(v)
-	case string:
-		if budget, ok := ThinkingBudgets[v]; ok {
-			return budget
-		}
-		// Try parsing as number
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-			return n
-		}
-	}
-	return 0
+	JobsMap map[string]*Job `yaml:"-"` // Resolved job objects (for external job files)
 }
 
 // GetEnv returns the environment variables for this agent
