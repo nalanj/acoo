@@ -558,7 +558,6 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintln(out)
-	fmt.Fprintf(out, "%s\n", styleOK.Render("✓ Done"))
 
 	return nil
 }
