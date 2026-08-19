@@ -14,11 +14,11 @@ var ThinkingBudgets = map[string]int64{
 
 // Agent represents an agent configuration
 type Agent struct {
-	Name     string            `yaml:"name"`
 	Env      map[string]string `yaml:"env"`
 	Jobs     map[string]string `yaml:"jobs"` // job name -> schedule
 
 	SourceFile string `yaml:"-"`
+	Name      string `yaml:"-"` // Derived from filename
 	Body      string `yaml:"-"` // The system prompt
 
 	JobsMap map[string]*Job `yaml:"-"` // Resolved job objects

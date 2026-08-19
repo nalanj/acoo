@@ -99,10 +99,7 @@ func ParseAgentContent(content string, sourceFile string) (*Agent, error) {
 		return nil, fmt.Errorf("parsing front matter: %w", err)
 	}
 
-	if agent.Name == "" {
-		agent.Name = strings.TrimSuffix(filepath.Base(sourceFile), ".md")
-	}
-
+	agent.Name = strings.TrimSuffix(filepath.Base(sourceFile), ".md")
 	agent.SourceFile = sourceFile
 	agent.Body = strings.TrimSpace(body)
 
@@ -172,10 +169,7 @@ func ParseJobContent(content string, sourceFile string) (*Job, error) {
 		return nil, fmt.Errorf("parsing front matter: %w", err)
 	}
 
-	if job.Name == "" {
-		job.Name = strings.TrimSuffix(filepath.Base(sourceFile), ".md")
-	}
-
+	job.Name = strings.TrimSuffix(filepath.Base(sourceFile), ".md")
 	job.SourceFile = sourceFile
 	job.Body = strings.TrimSpace(body)
 

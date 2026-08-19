@@ -18,7 +18,6 @@ ACOO is a CLI that runs multiple AI agents in parallel, each with their own sche
 
 ```markdown
 ---
-name: code-reviewer
 env:
   GITHUB_TOKEN: abc123
 jobs:
@@ -33,7 +32,6 @@ You are a code reviewer. You review proposed code changes for clarity and correc
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Agent identifier |
 | `env` | map | No | Environment variables (literal values) |
 | `jobs` | map | Yes | Job name → schedule mapping |
 
@@ -45,7 +43,6 @@ The markdown body (after front matter) is the **system prompt** for the agent.
 
 ```markdown
 ---
-name: review-changes
 provider: openai
 model: gpt-4o-mini
 thinking: low
@@ -62,7 +59,6 @@ Run the script 'changes_to_review' which outputs a list of changes. Review each 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `name` | string | Yes | Job identifier |
 | `provider` | string | Yes | Provider name (`openai`, `anthropic`, `minimax`, etc.) |
 | `model` | string | Yes | Model ID (e.g., `gpt-4o`, `claude-3-5-sonnet`) |
 | `thinking` | string/int | No | Thinking budget (effort level or token count) |

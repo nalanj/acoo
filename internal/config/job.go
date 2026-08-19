@@ -4,13 +4,13 @@ import "strconv"
 
 // Job represents a job definition
 type Job struct {
-	Name          string            `yaml:"name"`
 	Provider     string            `yaml:"provider"`
 	Model        string            `yaml:"model"`
 	Thinking      any               `yaml:"thinking"` // Token budget (int) or effort level
 	Preconditions []string         `yaml:"preconditions"` // Shell commands to run before job
 	Env           map[string]string `yaml:"env"` // Environment variables
 	SourceFile    string            `yaml:"-"`
+	Name          string            `yaml:"-"` // Derived from filename
 	Body          string            `yaml:"-"` // The task prompt
 }
 
