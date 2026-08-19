@@ -155,6 +155,15 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 		r.running[jobName] = true
 		r.mu.Unlock()
 
+		// Check preconditions
+		if !r.checkPreconditions(jobName, job) {
+			r.mu.Lock()
+			r.running[jobName] = false
+			r.mu.Unlock()
+			sched.NextRun()
+			continue
+		}
+
 		r.executeJob(jobName, job)
 
 		r.mu.Lock()
@@ -163,6 +172,24 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 
 		sched.NextRun()
 	}
+}
+
+// checkPreconditions runs preconditions and returns true if all pass
+func (r *Runner) checkPreconditions(jobName string, job *config.Job) bool {
+	if len(job.Preconditions) == 0 {
+		return true
+	}
+
+	for _, cmd := range job.Preconditions {
+		r.Logger.Printf("[%s] Running precondition: %s", jobName, cmd)
+		output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
+		if err != nil {
+			r.Logger.Printf("[%s] Precondition failed (skipping job): %s", jobName, cmd)
+			r.Logger.Printf("[%s] Precondition output: %s", jobName, string(output))
+			return false
+		}
+	}
+	return true
 }
 
 // executeJob runs a single job execution in a subprocess for environment isolation

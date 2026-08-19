@@ -12,7 +12,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/charmbracelet/bubbletea"
 	"github.com/spf13/cobra"
 
 	"github.com/nalanj/acoo/internal/agent"
@@ -83,47 +82,6 @@ Example:
 		RunE:  listProviders,
 	}
 
-	// New command group
-	newCmd := &cobra.Command{
-		Use:   "new",
-		Short: "Create new resources",
-	}
-
-	newAgentCmd := &cobra.Command{
-		Use:   "agent",
-		Short: "Create a new agent with a TUI wizard",
-		Long:  `Create a new agent using an interactive TUI wizard.
-
-Use --from to base the new agent on an existing agent's configuration.
-
-Example:
-  acoo new agent
-  acoo new agent --from code-reviewer`,
-		RunE: runNewAgent,
-	}
-
-	newCmd.AddCommand(newAgentCmd)
-	newAgentCmd.Flags().String("from", "", "Base new agent on an existing agent")
-
-	// Edit command group
-	editCmd := &cobra.Command{
-		Use:   "edit",
-		Short: "Edit existing resources",
-	}
-
-	editAgentCmd := &cobra.Command{
-		Use:   "agent <name>",
-		Short: "Edit an existing agent with a TUI wizard",
-		Long:  `Edit an existing agent using an interactive TUI wizard.
-
-Example:
-  acoo edit agent code-reviewer`,
-		Args: cobra.ExactArgs(1),
-		RunE: runEditAgent,
-	}
-
-	editCmd.AddCommand(editAgentCmd)
-
 	// Root command - use RunE instead of Run
 	root := &cobra.Command{
 		Use:          "acoo",
@@ -151,8 +109,6 @@ Example:
 	root.AddCommand(startCmd)
 	root.AddCommand(agentCmd)
 	root.AddCommand(providersCmd)
-	root.AddCommand(newCmd)
-	root.AddCommand(editCmd)
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -565,56 +521,6 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	fmt.Fprintln(out, dash)
 
 	fmt.Fprintln(out)
-	return nil
-}
-
-func runNewAgent(cmd *cobra.Command, args []string) error {
-	fromName, _ := cmd.Flags().GetString("from")
-
-	var sourceAgent *config.Agent
-	if fromName != "" {
-		path := filepath.Join(agentsDir, fromName+".md")
-		var err error
-		sourceAgent, err = config.LoadAgentFile(path)
-		if err != nil {
-			return fmt.Errorf("loading source agent %s: %w", fromName, err)
-		}
-	}
-
-	m := initialModel(sourceAgent)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-
-	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("running wizard: %w", err)
-	}
-
-	if m.done && m.resultFile != "" {
-		fmt.Printf("Agent saved to: %s\n", m.resultFile)
-	}
-
-	return nil
-}
-
-func runEditAgent(cmd *cobra.Command, args []string) error {
-	agentName := args[0]
-	path := filepath.Join(agentsDir, agentName+".md")
-
-	agent, err := config.LoadAgentFile(path)
-	if err != nil {
-		return fmt.Errorf("loading agent %s: %w", agentName, err)
-	}
-
-	m := initialEditModel(agent)
-	p := tea.NewProgram(m, tea.WithAltScreen())
-
-	if _, err := p.Run(); err != nil {
-		return fmt.Errorf("running wizard: %w", err)
-	}
-
-	if m.done && m.resultFile != "" {
-		fmt.Printf("Agent saved to: %s\n", m.resultFile)
-	}
-
 	return nil
 }
 
