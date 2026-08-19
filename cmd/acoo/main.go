@@ -239,15 +239,30 @@ func (m *AgentManager) Start(ctx context.Context) error {
 			path := parts[1]
 
 			dir := filepath.Dir(path)
-			name := filepath.Base(dir)
+			file := filepath.Base(path)
+			name := strings.TrimSuffix(file, ".md")
+
+			// Check if it's a job or agent file
+			isJob := dir == m.jobsDir
 
 			switch action {
 			case "added", "modified":
-				m.logger.Printf("Reloading agent: %s", name)
-				m.reloadAgent(name)
+				if isJob {
+					// Job changed - reload all agents that reference it
+					m.reloadAgentsWithJob(name)
+				} else {
+					// Agent changed
+					m.logger.Printf("Reloading agent: %s", name)
+					m.reloadAgent(name)
+				}
 			case "removed":
-				m.logger.Printf("Stopping agent: %s", name)
-				m.stopAgent(name)
+				if isJob {
+					// Job removed - reload all agents that referenced it
+					m.reloadAgentsWithJob(name)
+				} else {
+					m.logger.Printf("Stopping agent: %s", name)
+					m.stopAgent(name)
+				}
 			}
 		}
 	})
@@ -300,6 +315,24 @@ func (m *AgentManager) reloadAgent(name string) {
 	}
 
 	m.startAgent(agentConfig)
+}
+
+// reloadAgentsWithJob reloads all agents that reference the given job
+func (m *AgentManager) reloadAgentsWithJob(jobName string) {
+	// Load all agents
+	agents, err := config.LoadAgents(m.agentsDir)
+	if err != nil {
+		m.logger.Printf("Failed to load agents: %v", err)
+		return
+	}
+
+	// Find agents that reference this job
+	for _, a := range agents {
+		if _, refsJob := a.Jobs[jobName]; refsJob {
+			m.logger.Printf("Reloading agent %s (job %s changed)", a.Name, jobName)
+			m.reloadAgent(a.Name)
+		}
+	}
 }
 
 // startAgent starts an agent runner
