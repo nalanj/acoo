@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/fsnotify/fsnotify"
 )
@@ -18,6 +19,10 @@ type Watcher struct {
 
 	mu       sync.Mutex
 	knownFiles map[string]bool
+
+	// Debouncing
+	pending     map[string][]string // file -> actions
+	debounceTimer *time.Timer
 }
 
 // NewWatcher creates a new directory watcher
@@ -26,6 +31,7 @@ func NewWatcher(agentsDir, jobsDir string) (*Watcher, error) {
 		agentsDir: agentsDir,
 		jobsDir:   jobsDir,
 		knownFiles: make(map[string]bool),
+		pending:    make(map[string][]string),
 	}
 
 	var err error
@@ -91,7 +97,7 @@ func (w *Watcher) run(logger *log.Logger) {
 	}
 }
 
-// handleEvent processes a single fsnotify event
+// handleEvent processes a single fsnotify event with debouncing
 func (w *Watcher) handleEvent(event fsnotify.Event, logger *log.Logger) {
 	// Only care about create and remove events on .md files
 	if !isMarkdownFile(event.Name) {
@@ -101,44 +107,75 @@ func (w *Watcher) handleEvent(event fsnotify.Event, logger *log.Logger) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	changed := []string{}
-
 	switch {
 	case event.Has(fsnotify.Chmod):
 		// Treat chmod as modified (touch causes chmod)
 		if w.knownFiles[event.Name] {
-			changed = append(changed, "modified:"+event.Name)
+			w.pending[event.Name] = append(w.pending[event.Name], "modified")
+			w.scheduleDebounce()
 		}
 
 	case event.Has(fsnotify.Create):
 		if !w.knownFiles[event.Name] {
 			w.knownFiles[event.Name] = true
-			changed = append(changed, "added:"+event.Name)
-			logger.Printf("Agent added: %s", filepath.Base(filepath.Dir(event.Name)))
+			w.pending[event.Name] = append(w.pending[event.Name], "added")
+			w.scheduleDebounce()
 		} else {
 			// File already known but got recreated (e.g., sed -i)
-			changed = append(changed, "modified:"+event.Name)
+			w.pending[event.Name] = append(w.pending[event.Name], "modified")
+			w.scheduleDebounce()
 		}
 
 	case event.Has(fsnotify.Remove):
 		if w.knownFiles[event.Name] {
 			delete(w.knownFiles, event.Name)
-			changed = append(changed, "removed:"+event.Name)
-			logger.Printf("Agent removed: %s", filepath.Base(filepath.Dir(event.Name)))
+			w.pending[event.Name] = append(w.pending[event.Name], "removed")
+			w.scheduleDebounce()
 		}
 
 	case event.Has(fsnotify.Write):
 		// File was modified - treat as changed
 		if w.knownFiles[event.Name] {
-			changed = append(changed, "modified:"+event.Name)
-			logger.Printf("File modified: %s", event.Name)
+			w.pending[event.Name] = append(w.pending[event.Name], "modified")
+			w.scheduleDebounce()
 		}
 	}
+}
 
-	if len(changed) > 0 {
-		for _, h := range w.handlers {
-			h(changed)
+// scheduleDebounce starts or resets the debounce timer
+func (w *Watcher) scheduleDebounce() {
+	if w.debounceTimer != nil {
+		w.debounceTimer.Stop()
+	}
+	w.debounceTimer = time.AfterFunc(100*time.Millisecond, func() {
+		w.mu.Lock()
+		defer w.mu.Unlock()
+		w.flushPending()
+	})
+}
+
+// flushPending sends all pending changes to handlers
+func (w *Watcher) flushPending() {
+	if len(w.pending) == 0 {
+		return
+	}
+
+	changed := []string{}
+	for path, actions := range w.pending {
+		// Deduplicate actions - modified/removed takes precedence over added
+		action := "modified"
+		if len(actions) == 1 && actions[0] == "added" {
+			action = "added"
+		} else if len(actions) == 1 && actions[0] == "removed" {
+			action = "removed"
 		}
+		changed = append(changed, action+":"+path)
+	}
+
+	w.pending = make(map[string][]string)
+
+	for _, h := range w.handlers {
+		h(changed)
 	}
 }
 
