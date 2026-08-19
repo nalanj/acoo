@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/nalanj/acoo/internal/agent"
@@ -24,6 +25,14 @@ var (
 	agentsDir string
 	jobsDir   string
 	verbose   bool
+)
+
+var (
+	styleOK      = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
+	styleErr     = lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	styleBold    = lipgloss.NewStyle().Bold(true)
+	styleDim     = lipgloss.NewStyle().Faint(true)
+	styleCyan    = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
 )
 
 func main() {
@@ -489,33 +498,22 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	sep := strings.Repeat("=", 60)
-	dash := strings.Repeat("-", 30)
+
+	// Header
+	fmt.Fprintf(out, "%s Running %s/%s\n", styleCyan.Render("→"), styleBold.Render(agentName), styleBold.Render(jobName))
+	fmt.Fprintf(out, "%s %s · %s\n\n", styleDim.Render(schedule), job.Provider, job.Model)
 
 	// Run preconditions
 	if len(job.Preconditions) > 0 {
-		fmt.Fprintln(out, sep)
-		fmt.Fprintln(out, "# PRECONDITIONS")
-		fmt.Fprintln(out, dash)
+		fmt.Fprintf(out, "%s\n", styleDim.Render("Checking preconditions..."))
 		for _, prec := range job.Preconditions {
-			fmt.Fprintf(out, "Running: %s\n", prec)
-			execOut, err := exec.Command("sh", "-c", prec).CombinedOutput()
-			if err != nil {
-				fmt.Fprintf(out, "FAILED: %s\n", string(execOut))
+			if _, err := exec.Command("sh", "-c", prec).CombinedOutput(); err != nil {
+				fmt.Fprintf(out, "%s %s\n", styleErr.Render("✗"), prec)
 				return fmt.Errorf("precondition failed: %s", prec)
 			}
-			fmt.Fprintf(out, "OK\n")
 		}
-		fmt.Fprintln(out)
+		fmt.Fprintf(out, "%s\n", styleOK.Render("✓ Preconditions passed"))
 	}
-
-	// Show config summary
-	fmt.Fprintln(out, sep)
-	fmt.Fprintf(out, "Agent: %s\n", agentConfig.Name)
-	fmt.Fprintf(out, "Job: %s\n", job.Name)
-	fmt.Fprintf(out, "Schedule: %s\n", schedule)
-	fmt.Fprintf(out, "Provider: %s, Model: %s\n", job.Provider, job.Model)
-	fmt.Fprintln(out, sep)
 
 	// Build environment
 	env := os.Environ()
@@ -548,9 +546,6 @@ func testAgent(cmd *cobra.Command, args []string) error {
 		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
 	}
 
-	fmt.Fprintln(out, "# RUNNING")
-	fmt.Fprintln(out, dash)
-
 	// Execute
 	proc := exec.Command(execPath, cmdArgs...)
 	proc.Env = env
@@ -561,8 +556,7 @@ func testAgent(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintln(out)
-	fmt.Fprintln(out, sep)
-	fmt.Fprintln(out, "Done.")
+	fmt.Fprintf(out, "%s\n", styleOK.Render("✓ Done"))
 
 	return nil
 }
