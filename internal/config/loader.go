@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -14,40 +13,6 @@ import (
 
 // FrontMatterRegex matches YAML front matter
 var FrontMatterRegex = regexp.MustCompile(`(?s)^---\n(.*?)\n---\n(.*)`)
-
-// JobConfig represents a job configuration defined inline in an agent file
-type JobConfig struct {
-	Schedule     string   `yaml:"schedule"`
-	Model        string   `yaml:"model"`
-	Thinking      any      `yaml:"thinking"`
-	Preconditions []string `yaml:"preconditions"`
-	Prompt       string   `yaml:"prompt"` // Task prompt (optional, can use external job file instead)
-}
-
-// GetThinkingBudget returns the thinking budget in tokens
-func (j *JobConfig) GetThinkingBudget() int64 {
-	if j.Thinking == nil {
-		return 0
-	}
-
-	switch v := j.Thinking.(type) {
-	case int:
-		return int64(v)
-	case int64:
-		return v
-	case float64:
-		return int64(v)
-	case string:
-		if budget, ok := ThinkingBudgets[v]; ok {
-			return budget
-		}
-		// Try parsing as number
-		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
-			return n
-		}
-	}
-	return 0
-}
 
 // LoadAll loads agents and jobs from directories
 func LoadAll(agentsDir, jobsDir string) ([]*Agent, map[string]*Job, error) {
@@ -64,7 +29,7 @@ func LoadAll(agentsDir, jobsDir string) ([]*Agent, map[string]*Job, error) {
 	// Link jobs to agents
 	for _, agent := range agents {
 		agent.JobsMap = make(map[string]*Job)
-		for jobName := range agent.Jobs {
+		for _, jobName := range agent.Jobs {
 			if job, ok := jobs[jobName]; ok {
 				agent.JobsMap[jobName] = job
 			}
@@ -227,12 +192,16 @@ func ListAgents(agentsDir, jobsDir string) ([]AgentInfo, error) {
 	var infos []AgentInfo
 	for _, a := range agents {
 		var jobs []string
-		for name, cfg := range a.Jobs {
-			model := cfg.Model
-			if model != "" {
-				jobs = append(jobs, fmt.Sprintf("%s: %s (model: %s)", name, cfg.Schedule, model))
+		for _, jobName := range a.Jobs {
+			if job, ok := a.JobsMap[jobName]; ok {
+				model := job.Model
+				if model != "" {
+					jobs = append(jobs, fmt.Sprintf("%s: %s (model: %s)", jobName, job.Schedule, model))
+				} else {
+					jobs = append(jobs, fmt.Sprintf("%s: %s", jobName, job.Schedule))
+				}
 			} else {
-				jobs = append(jobs, fmt.Sprintf("%s: %s", name, cfg.Schedule))
+				jobs = append(jobs, fmt.Sprintf("%s: <not found>", jobName))
 			}
 		}
 		infos = append(infos, AgentInfo{

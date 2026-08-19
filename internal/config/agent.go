@@ -17,12 +17,12 @@ type Agent struct {
 	Name     string            `yaml:"name"`
 	Provider string            `yaml:"provider"`
 	Env      map[string]string `yaml:"env"`
-	Jobs     map[string]*JobConfig `yaml:"jobs"` // job name -> job config
+	Jobs     []string         `yaml:"jobs"` // list of job names
 
 	SourceFile string `yaml:"-"`
 	Body      string `yaml:"-"` // The system prompt
 
-	JobsMap map[string]*Job `yaml:"-"` // Resolved job objects (for external job files)
+	JobsMap map[string]*Job `yaml:"-"` // Resolved job objects
 }
 
 // GetEnv returns the environment variables for this agent

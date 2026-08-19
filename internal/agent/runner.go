@@ -47,11 +47,11 @@ func (r *Runner) Start(ctx context.Context) {
 	r.started = true
 	r.mu.Unlock()
 
-	r.Logger.Printf("Agent started with %d jobs", len(r.Agent.Jobs))
+	r.Logger.Printf("Agent started with %d jobs", len(r.Agent.JobsMap))
 
 	// Parse schedules for each job
-	for jobName, jobConfig := range r.Agent.Jobs {
-		sched, err := scheduler.Parse(jobConfig.Schedule)
+	for jobName, job := range r.Agent.JobsMap {
+		sched, err := scheduler.Parse(job.Schedule)
 		if err != nil {
 			r.Logger.Printf("Invalid schedule for %s: %v", jobName, err)
 			continue
@@ -104,15 +104,13 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 	defer r.wg.Done()
 
 	sched := r.schedule[jobName]
-	jobConfig := r.Agent.Jobs[jobName]
-	// Get external job file if exists
 	job := r.Agent.JobsMap[jobName]
 
 	r.Logger.Printf("[%s] Job started, schedule: %s", jobName, sched.Spec)
 
 	// Run immediately for @once
 	if sched.IsOneShot() {
-		r.executeJob(jobName, jobConfig, job)
+		r.executeJob(jobName, job)
 		return
 	}
 
@@ -157,8 +155,8 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 		r.running[jobName] = true
 		r.mu.Unlock()
 
-		// Check preconditions from job config
-		if !r.checkPreconditions(jobName, jobConfig) {
+		// Check preconditions
+		if !r.checkPreconditions(job) {
 			r.mu.Lock()
 			r.running[jobName] = false
 			r.mu.Unlock()
@@ -166,7 +164,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 			continue
 		}
 
-		r.executeJob(jobName, jobConfig, job)
+		r.executeJob(jobName, job)
 
 		r.mu.Lock()
 		r.running[jobName] = false
@@ -177,17 +175,17 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 }
 
 // checkPreconditions runs preconditions and returns true if all pass
-func (r *Runner) checkPreconditions(jobName string, jobConfig *config.JobConfig) bool {
-	if len(jobConfig.Preconditions) == 0 {
+func (r *Runner) checkPreconditions(job *config.Job) bool {
+	if len(job.Preconditions) == 0 {
 		return true
 	}
 
-	for _, cmd := range jobConfig.Preconditions {
-		r.Logger.Printf("[%s] Running precondition: %s", jobName, cmd)
+	for _, cmd := range job.Preconditions {
+		r.Logger.Printf("[%s] Running precondition: %s", job.Name, cmd)
 		output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 		if err != nil {
-			r.Logger.Printf("[%s] Precondition failed (skipping job): %s", jobName, cmd)
-			r.Logger.Printf("[%s] Precondition output: %s", jobName, string(output))
+			r.Logger.Printf("[%s] Precondition failed (skipping job): %s", job.Name, cmd)
+			r.Logger.Printf("[%s] Precondition output: %s", job.Name, string(output))
 			return false
 		}
 	}
@@ -195,8 +193,8 @@ func (r *Runner) checkPreconditions(jobName string, jobConfig *config.JobConfig)
 }
 
 // executeJob runs a single job execution in a subprocess for environment isolation
-func (r *Runner) executeJob(jobName string, jobConfig *config.JobConfig, jobFile *config.Job) {
-	r.Logger.Printf("[%s] Starting job", jobName)
+func (r *Runner) executeJob(jobName string, job *config.Job) {
+	r.Logger.Printf("[%s] Starting job", job.Name)
 
 	// Build system prompt from agent body
 	systemPrompt := r.Agent.Body
@@ -204,36 +202,33 @@ func (r *Runner) executeJob(jobName string, jobConfig *config.JobConfig, jobFile
 		systemPrompt = "You are a helpful AI assistant."
 	}
 
-	// Build task prompt - from inline config or external job file
-	taskPrompt := jobConfig.Prompt
-	if taskPrompt == "" && jobFile != nil {
-		taskPrompt = jobFile.Body
-	}
+	// Build task prompt from job body
+	taskPrompt := job.Body
 
 	// Find the acoo binary path
 	execPath, err := os.Executable()
 	if err != nil {
-		r.Logger.Printf("[%s] Failed to find executable: %v", jobName, err)
+		r.Logger.Printf("[%s] Failed to find executable: %v", job.Name, err)
 		return
 	}
 
-	// Build environment - start with current env, then add agent-specific vars
+	// Build environment - start with current env, then add agent vars, then job vars
 	env := os.Environ()
 	for k, v := range r.Agent.GetEnv() {
 		env = append(env, k+"="+v)
 	}
-
-	// Get model from job config
-	model := jobConfig.Model
+	for k, v := range job.GetEnv() {
+		env = append(env, k+"="+v)
+	}
 
 	// Build command with thinking budget if set
 	cmdArgs := []string{"agent",
 		"--system-prompt", systemPrompt,
 		"--task-prompt", taskPrompt,
-		"--model", model,
+		"--model", job.Model,
 		"--provider", r.Agent.Provider,
 	}
-	if thinkingBudget := jobConfig.GetThinkingBudget(); thinkingBudget > 0 {
+	if thinkingBudget := job.GetThinkingBudget(); thinkingBudget > 0 {
 		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
 	}
 

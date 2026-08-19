@@ -4,12 +4,19 @@ import "strconv"
 
 // Job represents a job definition
 type Job struct {
-	Name          string   `yaml:"name"`
-	Model        string   `yaml:"model"`
-	Thinking      any      `yaml:"thinking"` // Token budget (int) or effort level
-	Preconditions []string `yaml:"preconditions"` // Shell commands to run before job
-	SourceFile    string   `yaml:"-"`
-	Body          string   `yaml:"-"` // The task prompt
+	Name          string            `yaml:"name"`
+	Schedule     string            `yaml:"schedule"`
+	Model        string            `yaml:"model"`
+	Thinking      any               `yaml:"thinking"` // Token budget (int) or effort level
+	Preconditions []string         `yaml:"preconditions"` // Shell commands to run before job
+	Env           map[string]string `yaml:"env"` // Environment variables
+	SourceFile    string            `yaml:"-"`
+	Body          string            `yaml:"-"` // The task prompt
+}
+
+// GetEnv returns merged environment variables (job takes precedence over agent)
+func (j *Job) GetEnv() map[string]string {
+	return j.Env
 }
 
 // GetThinkingBudget returns the thinking budget in tokens
