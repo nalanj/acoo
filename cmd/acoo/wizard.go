@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -28,6 +29,9 @@ var (
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("241"))
+
+	warningStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("214"))
 )
 
 // wizardModel holds the state for the agent creation wizard
@@ -41,11 +45,14 @@ type wizardModel struct {
 	systemPrompt  string
 	jobName       string
 	jobSchedule   string
+	envVars       map[string]string // key -> value
 
-	nameInput        textinput.Model
-	promptInput      textinput.Model
-	jobNameInput     textinput.Model
-	jobScheduleInput textinput.Model
+	nameInput         textinput.Model
+	promptInput       textinput.Model
+	jobNameInput      textinput.Model
+	jobScheduleInput  textinput.Model
+	envKeyInput       textinput.Model
+	envValueInput     textinput.Model
 
 	providers      []string
 	providerNames []string
@@ -53,6 +60,8 @@ type wizardModel struct {
 	thinkingOpts  []string
 
 	currentSelection int
+	envVarKeys      []string // sorted keys for display
+	showEnvValues   bool    // whether to show env values
 	err             error
 	done            bool
 	quitting        bool
@@ -72,11 +81,12 @@ func initialModel(sourceAgent *config.Agent) *wizardModel {
 	}
 
 	m := &wizardModel{
-		totalSteps:    7,
+		totalSteps:    8,
 		providers:     providers,
 		providerNames: providerNames,
 		models:        []string{},
 		thinkingOpts:  []string{"disabled", "low", "medium", "high", "very_high", "max"},
+		envVars:      make(map[string]string),
 	}
 
 	// Initialize text inputs
@@ -93,6 +103,13 @@ func initialModel(sourceAgent *config.Agent) *wizardModel {
 	m.jobScheduleInput = textinput.New()
 	m.jobScheduleInput.Placeholder = "@every 30s"
 
+	m.envKeyInput = textinput.New()
+	m.envKeyInput.Placeholder = "ENV_VAR_NAME"
+
+	m.envValueInput = textinput.New()
+	m.envValueInput.Placeholder = "value (will not be echoed)"
+	m.envValueInput.EchoMode = textinput.EchoNone
+
 	// Pre-fill from source agent if provided
 	if sourceAgent != nil {
 		m.name = sourceAgent.Name + "-copy"
@@ -103,9 +120,24 @@ func initialModel(sourceAgent *config.Agent) *wizardModel {
 		m.nameInput.SetValue(m.name)
 		m.promptInput.SetValue(m.systemPrompt)
 		m.updateModelsForProvider()
+
+		// Copy env vars but mark as hidden - they won't be shown by default
+		// User must explicitly choose to include them
+		for k, v := range sourceAgent.Env {
+			m.envVars[k] = v
+		}
+		m.updateEnvVarKeys()
 	}
 
 	return m
+}
+
+func (m *wizardModel) updateEnvVarKeys() {
+	m.envVarKeys = make([]string, 0, len(m.envVars))
+	for k := range m.envVars {
+		m.envVarKeys = append(m.envVarKeys, k)
+	}
+	sort.Strings(m.envVarKeys)
 }
 
 func thinkingToOption(budget int64) string {
@@ -187,10 +219,26 @@ func (m *wizardModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleUp()
 		case tea.KeyDown:
 			return m.handleDown()
+		case tea.KeyDelete:
+			if m.step == 5 && len(m.envVarKeys) > 0 && m.currentSelection < len(m.envVarKeys) {
+				key := m.envVarKeys[m.currentSelection]
+				m.removeEnvVar(key)
+				if m.currentSelection >= len(m.envVarKeys) && m.currentSelection > 0 {
+					m.currentSelection = len(m.envVarKeys) - 1
+				}
+			}
+		case tea.KeyRunes:
+			if m.step == 5 && len(msg.Runes) > 0 {
+				switch msg.Runes[0] {
+				case 'd', 'D':
+					m.showEnvValues = !m.showEnvValues
+				}
+			}
 		}
 	}
 	return m, nil
 }
+
 
 func (m *wizardModel) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
@@ -207,17 +255,19 @@ func (m *wizardModel) handleEnter() (tea.Model, tea.Cmd) {
 	case 3: // Thinking
 		m.step++
 	case 4: // System prompt
-		m.systemPrompt = "You are a helpful AI assistant."
+		m.systemPrompt = m.promptInput.Placeholder
 		if m.promptInput.Value() != "" {
 			m.systemPrompt = m.promptInput.Value()
 		}
 		m.step++
-	case 5: // Job name
+	case 5: // Env vars
+		m.step++
+	case 6: // Job name
 		if m.jobNameInput.Value() != "" {
 			m.jobName = m.jobNameInput.Value()
 			m.step++
 		}
-	case 6: // Job schedule
+	case 7: // Job schedule
 		if m.jobScheduleInput.Value() != "" {
 			m.jobSchedule = m.jobScheduleInput.Value()
 			return m, m.saveAgent
@@ -279,12 +329,29 @@ func (m *wizardModel) handleDown() (tea.Model, tea.Cmd) {
 	return m.handleTab()
 }
 
+func (m *wizardModel) addEnvVar() {
+	key := m.envKeyInput.Value()
+	value := m.envValueInput.Value()
+	if key != "" {
+		m.envVars[key] = value
+		m.updateEnvVarKeys()
+	}
+	m.envKeyInput.SetValue("")
+	m.envValueInput.SetValue("")
+}
+
+func (m *wizardModel) removeEnvVar(key string) {
+	delete(m.envVars, key)
+	m.updateEnvVarKeys()
+}
+
 func (m *wizardModel) saveAgent() tea.Msg {
 	agent := &config.Agent{
 		Name:     m.name,
 		Provider: m.provider,
 		Model:    m.model,
 		Body:     m.systemPrompt,
+		Env:      m.envVars,
 		Jobs:     map[string]string{m.jobName: m.jobSchedule},
 	}
 
@@ -356,10 +423,35 @@ func (m *wizardModel) View() string {
 		s.WriteString(m.promptInput.View())
 
 	case 5:
+		s.WriteString(fieldStyle.Render("Environment variables:") + "\n\n")
+		if len(m.envVars) == 0 {
+			s.WriteString(fieldStyle.Render("  (no env vars defined)") + "\n")
+		} else {
+			for _, key := range m.envVarKeys {
+				value := m.envVars[key]
+				if !m.showEnvValues {
+					value = "********"
+				}
+				s.WriteString(fmt.Sprintf("  %s=%s", key, value))
+				s.WriteString(helpStyle.Render(" [del]"))
+				s.WriteString("\n")
+			}
+		}
+		s.WriteString("\n")
+		s.WriteString(fieldStyle.Render("Add env var:") + "\n")
+		s.WriteString("Key: ")
+		s.WriteString(m.envKeyInput.View())
+		s.WriteString("\n")
+		s.WriteString("Value: ")
+		s.WriteString(m.envValueInput.View())
+		s.WriteString("\n")
+		s.WriteString(helpStyle.Render("(Press Enter to add, d to toggle value visibility, Del to remove selected)"))
+
+	case 6:
 		s.WriteString(fieldStyle.Render("First job name:") + "\n")
 		s.WriteString(m.jobNameInput.View())
 
-	case 6:
+	case 7:
 		s.WriteString(fieldStyle.Render("First job schedule:") + "\n")
 		s.WriteString(m.jobScheduleInput.View())
 		s.WriteString("\n")
@@ -380,6 +472,17 @@ func formatAgentMarkdown(a *config.Agent) string {
 	s.WriteString(fmt.Sprintf("model: %s\n", a.Model))
 	if a.GetThinkingBudget() > 0 {
 		s.WriteString(fmt.Sprintf("thinking: %d\n", a.GetThinkingBudget()))
+	}
+	if len(a.Env) > 0 {
+		s.WriteString("env:\n")
+		keys := make([]string, 0, len(a.Env))
+		for k := range a.Env {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			s.WriteString(fmt.Sprintf("  %s: \"%s\"\n", k, a.Env[k]))
+		}
 	}
 	s.WriteString("jobs:\n")
 	for job, schedule := range a.Jobs {
