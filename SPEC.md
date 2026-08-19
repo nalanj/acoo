@@ -2,7 +2,7 @@
 
 ## Overview
 
-ACOO is a CLI that runs multiple AI agents in parallel, each with their own schedules and jobs. Agents use LLM providers (via fantasy) to process tasks defined in job files.
+ACOO is a CLI that runs multiple AI agents in parallel, each with their own scheduled jobs. Jobs use LLM providers (via fantasy) to process tasks.
 
 ## File Structure
 
@@ -19,14 +19,12 @@ ACOO is a CLI that runs multiple AI agents in parallel, each with their own sche
 ```markdown
 ---
 name: code-reviewer
-model: gpt-4o
-provider: openai
 env:
   GITHUB_TOKEN: abc123
   EMAIL_FROM: noreply@example.com
 jobs:
-  review-changes: "@every 30s"
-  summarize-reviews: "0 9 * * *"
+  - review-changes
+  - summarize-reviews
 ---
 
 You are a code reviewer. You review proposed code changes for clarity and correctness.
@@ -37,10 +35,8 @@ You are a code reviewer. You review proposed code changes for clarity and correc
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | Agent identifier |
-| `model` | string | Yes | Model ID (e.g., `gpt-4o`, `claude-3-5-sonnet`) |
-| `provider` | string | Yes | Provider name (`openai`, `anthropic`, `openrouter`, etc.) |
 | `env` | map | No | Environment variables (literal values) |
-| `jobs` | map | Yes | Job name → schedule mapping |
+| `jobs` | list | Yes | List of job names |
 
 ### Body
 
@@ -51,9 +47,17 @@ The markdown body (after front matter) is the **system prompt** for the agent.
 ```markdown
 ---
 name: review-changes
+provider: openai
+model: gpt-4o-mini
+thinking: low
+schedule: "@every 30s"
+preconditions:
+  - "command -v changes_to_review >/dev/null"
+env:
+  REPO_PATH: /home/user/repo
 ---
 
-Run the script 'changes_to_review' which outputs a list of changes. Review each change and send an email with the results to the address returned by the command.
+Run the script 'changes_to_review' which outputs a list of changes. Review each change and send an email with the results.
 ```
 
 ### Front Matter Fields
@@ -61,6 +65,27 @@ Run the script 'changes_to_review' which outputs a list of changes. Review each 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `name` | string | Yes | Job identifier |
+| `provider` | string | Yes | Provider name (`openai`, `anthropic`, `minimax`, etc.) |
+| `model` | string | Yes | Model ID (e.g., `gpt-4o`, `claude-3-5-sonnet`) |
+| `schedule` | string | Yes | Cron or interval schedule |
+| `thinking` | string/int | No | Thinking budget (effort level or token count) |
+| `preconditions` | list | No | Shell commands that must pass before job runs |
+| `env` | map | No | Job-specific environment variables |
+
+### Thinking Budget
+
+Named effort levels or numeric tokens:
+
+| Level | Tokens |
+|-------|--------|
+| `disabled` | 0 |
+| `low` | 10,000 |
+| `medium` | 16,000 |
+| `high` | 32,000 |
+| `very_high` | 64,000 |
+| `max` | 100,000 |
+
+Or specify directly: `thinking: 20000`
 
 ### Body
 
@@ -70,11 +95,9 @@ The markdown body is the **task prompt** - the instruction/task for the agent.
 
 Each job has its own explicit schedule:
 
-- **Cron**: `0 0 * * * *` (6 fields with seconds: sec min hour day month dow)
-- **Interval**: `@every 30s`, `@every 5m`, `@every 1h`
+- **Cron**: `0 0 9 * * *` (6 fields with seconds: sec min hour day month dow)
+- **Interval**: `@every 30s`, `@every 5m`, `@every 1h` (seconds supported)
 - **One-shot**: `@once`
-
-Seconds are supported in `@every` intervals.
 
 ## Execution Flow
 
@@ -82,14 +105,15 @@ Seconds are supported in `@every` intervals.
 ┌─────────────────────────────────────────────────────────┐
 │ 1. Load all agents and jobs                           │
 │ 2. For each agent:                                    │
-│    a. Create fantasy.Agent with system prompt         │
+│    a. Create runner with system prompt                │
 │    b. For each job:                                   │
-│       - Start scheduler goroutine                      │
+│       - Start scheduler goroutine                     │
 │ 3. On schedule trigger:                               │
-│    a. Combine system prompt + job prompt              │
-│    b. Call fantasy agent in a loop                    │
-│    c. Continue until '<<<<<DONE>>>>>'                │
-│    d. Return final response                           │
+│    a. Check preconditions                             │
+│    b. If all pass: spawn subprocess with env vars     │
+│    c. Subprocess: fantasy agent loop                  │
+│    d. Continue until '<<<<<DONE>>>>>'                │
+│ 4. Hot reload on file changes                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -139,6 +163,14 @@ Agents have access to the following tools:
 {"path": "/home/user/projects"}
 ```
 
+## Environment Variables
+
+Environment variables are merged from agent and job levels:
+- Agent env vars are set first
+- Job env vars override agent vars with same name
+
+All values are literal - no `$VAR` substitution.
+
 ## Hot Reloading
 
 ACOO watches the agents and jobs directories:
@@ -146,30 +178,19 @@ ACOO watches the agents and jobs directories:
 - **Remove agent** → automatically stops runner
 - **Modify config** → reloads that agent
 
-## Environment Isolation
+## Skip-if-Running
 
-Each agent runs in its own subprocess with isolated environment:
-- Agent-specific environment variables are isolated
-- Each agent gets its own LLM process
-- Prevents cross-contamination between agents
-
-## Supported Providers
-
-- `openai` - OpenAI models
-- `anthropic` - Anthropic models
-- `openrouter` - OpenRouter aggregated models
-- `google` / `gemini` - Google AI models
-- Any OpenAI-compatible endpoint (URL)
+If a job is still running when its next trigger fires, the trigger is skipped (not queued).
 
 ## CLI Commands
 
 ```bash
 acoo                    # Run all agents
 acoo run                # Run all agents (same as above)
-acoo run <name>         # Run a specific agent once
 acoo list               # List all agents and their jobs
 acoo validate           # Validate all configs
-acoo test <name> <job>  # Test an agent job (show prompts, dry run)
+acoo test <name> <job>  # Run a job once (with preconditions)
+acoo providers          # List available providers and models
 ```
 
 ## Project Structure
@@ -177,19 +198,24 @@ acoo test <name> <job>  # Test an agent job (show prompts, dry run)
 ```
 cmd/acoo/
   main.go           # Entry point, CLI, agent manager
+  subprocess.go     # Subprocess entry for job execution
+  wizard.go         # TUI for creating agents
 
 internal/
   config/
-    agent.go       # Agent config types
-    job.go         # Job config types
-    loader.go      # File loading and parsing
-    watcher.go     # File system watcher for hot reload
+    types.go        # Shared types (ThinkingBudgets)
+    agent.go        # Agent config types
+    job.go          # Job config types
+    loader.go       # File loading and parsing
+    watcher.go      # File system watcher for hot reload
   agent/
-    runner.go      # Agent runner (goroutine per job)
+    runner.go       # Agent runner (goroutine per job)
+    tools.go        # Tool definitions
+    executor.go     # Job execution logic
   scheduler/
-    scheduler.go   # Cron/interval parsing
+    scheduler.go    # Cron/interval parsing
   provider/
-    factory.go     # LLM provider factory
+    factory.go      # LLM provider factory
 ```
 
 ## Dependencies
