@@ -21,10 +21,9 @@ ACOO is a CLI that runs multiple AI agents in parallel, each with their own sche
 name: code-reviewer
 env:
   GITHUB_TOKEN: abc123
-  EMAIL_FROM: noreply@example.com
 jobs:
-  - review-changes
-  - summarize-reviews
+  review-changes: "@every 30s"
+  summarize-reviews: "0 9 * * *"
 ---
 
 You are a code reviewer. You review proposed code changes for clarity and correctness.
@@ -36,7 +35,7 @@ You are a code reviewer. You review proposed code changes for clarity and correc
 |-------|------|----------|-------------|
 | `name` | string | Yes | Agent identifier |
 | `env` | map | No | Environment variables (literal values) |
-| `jobs` | list | Yes | List of job names |
+| `jobs` | map | Yes | Job name → schedule mapping |
 
 ### Body
 
@@ -50,7 +49,6 @@ name: review-changes
 provider: openai
 model: gpt-4o-mini
 thinking: low
-schedule: "@every 30s"
 preconditions:
   - "command -v changes_to_review >/dev/null"
 env:
@@ -67,7 +65,6 @@ Run the script 'changes_to_review' which outputs a list of changes. Review each 
 | `name` | string | Yes | Job identifier |
 | `provider` | string | Yes | Provider name (`openai`, `anthropic`, `minimax`, etc.) |
 | `model` | string | Yes | Model ID (e.g., `gpt-4o`, `claude-3-5-sonnet`) |
-| `schedule` | string | Yes | Cron or interval schedule |
 | `thinking` | string/int | No | Thinking budget (effort level or token count) |
 | `preconditions` | list | No | Shell commands that must pass before job runs |
 | `env` | map | No | Job-specific environment variables |
