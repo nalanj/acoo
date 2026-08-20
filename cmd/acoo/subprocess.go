@@ -31,6 +31,8 @@ type SubprocessResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
+const maxMessages = 10 // Maximum messages to keep in history
+
 // runAgentSubprocess handles the "agent" subcommand for subprocess mode
 func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	systemPrompt, _ := cmd.Flags().GetString("system-prompt")
@@ -80,6 +82,9 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	for iteration < maxIterations {
 		iteration++
 
+		// Prune messages to prevent context overflow
+		messages = pruneMessages(messages)
+
 		result, err := agentInstance.Generate(ctx, fantasy.AgentCall{
 			Prompt:   currentPrompt,
 			Messages: messages,
@@ -119,4 +124,15 @@ func isDone(response string) bool {
 		}
 	}
 	return false
+}
+
+// pruneMessages keeps the conversation from growing too large.
+// Keeps the first message (system prompt) and the most recent messages.
+func pruneMessages(messages []fantasy.Message) []fantasy.Message {
+	if len(messages) <= maxMessages {
+		return messages
+	}
+	// Keep first message (system) and last maxMessages-1 messages
+	keep := maxMessages - 1
+	return append(messages[:1], messages[len(messages)-keep:]...)
 }
