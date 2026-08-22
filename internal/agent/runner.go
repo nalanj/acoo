@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"time"
 
@@ -175,8 +176,11 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 		r.Logger.Info("running_precondition", log.F("job", job.Name), log.F("command", cmd))
 		output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 		if err != nil {
-			r.Logger.Warn("precondition_failed", log.F("job", job.Name), log.F("command", cmd))
-			r.Logger.Info("precondition_output", log.F("job", job.Name), log.F("output", string(output)))
+			outputStr := strings.TrimSpace(string(output))
+			if outputStr == "" {
+				outputStr = "(no output)"
+			}
+			r.Logger.Warn("precondition_failed", log.F("job", job.Name), log.F("command", cmd), log.F("output", outputStr))
 			return false
 		}
 	}
