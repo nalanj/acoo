@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -19,7 +20,7 @@ import (
 	"github.com/nalanj/acoo/internal/storage"
 )
 
-const maxMessagesBeforeCompaction = 20 // Trigger compaction after this many messages
+const maxCompactionRetries = 1 // Max compaction attempts before giving up
 
 // runAgentSubprocess handles the "agent" subcommand for subprocess mode
 func runAgentSubprocess(cmd *cobra.Command, args []string) error {
@@ -55,20 +56,6 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	}
 	_ = lm // Used for compaction later
 
-	// Check if session needs compaction at startup
-	meta, _ := store.GetMetadata()
-	if meta != nil && meta.MessageCount >= maxMessagesBeforeCompaction {
-		log.Printf("[compaction] Session has %d messages, compacting before new work", meta.MessageCount)
-		
-		// Generate summary using the LLM
-		summary := generateSummary(ctx, lm, systemPrompt, meta.MessageCount)
-		
-		_, err := store.CompactStart(summary)
-		if err != nil {
-			log.Printf("[compaction] Warning: %v", err)
-		}
-	}
-
 	// Save system prompt only if different from current (and current is not empty)
 	existingPrompt, _ := store.GetSystemPrompt()
 	if existingPrompt != "" && existingPrompt != systemPrompt {
@@ -102,7 +89,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	iteration := 0
 	maxIterations := 100
 	currentPrompt := taskPrompt
-	sessionMsgCount := 0
+	compactionRetries := 0
 
 	for iteration < maxIterations {
 		iteration++
@@ -113,13 +100,39 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 			Content:   currentPrompt,
 			Timestamp: time.Now(),
 		})
-		sessionMsgCount++
 
 		result, err := agentInstance.Generate(ctx, fantasy.AgentCall{
 			Prompt:   currentPrompt,
 			Messages: messages,
 		})
 		if err != nil {
+			// Check for context too large error
+			var provErr *fantasy.ProviderError
+			if errors.As(err, &provErr) && provErr.IsContextTooLarge() {
+				if compactionRetries < maxCompactionRetries {
+					log.Printf("[compaction] Context too large, compacting session")
+
+					// Get message count for summary
+					meta, _ := store.GetMetadata()
+					msgCount := 0
+					if meta != nil {
+						msgCount = meta.MessageCount
+					}
+
+					// Generate summary and compact
+					summary := generateSummary(ctx, lm, systemPrompt, msgCount)
+					_, err := store.CompactStart(summary)
+					if err != nil {
+						log.Printf("[compaction] Failed: %v", err)
+						return fmt.Errorf("context overflow after compaction: %w", err)
+					}
+
+					compactionRetries++
+					messages = nil // Clear messages, start fresh
+					continue // Retry with empty context
+				}
+				return fmt.Errorf("context overflow: %w", err)
+			}
 			return fmt.Errorf("agent error: %w", err)
 		}
 
@@ -159,16 +172,8 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 					Content:   content,
 					Timestamp: time.Now(),
 				})
-				sessionMsgCount++
 			}
 		}
-
-		// Check for compaction
-		messages, err = checkCompaction(ctx, store, agentInstance, messages, sessionMsgCount)
-		if err != nil {
-			log.Printf("[compaction] Warning: %v", err)
-		}
-		sessionMsgCount = len(messages)
 
 		// Check for done
 		if isDone(response) {
@@ -226,56 +231,6 @@ func isDone(response string) bool {
 		}
 	}
 	return false
-}
-
-// checkCompaction checks if we need to compact and does so if necessary
-func checkCompaction(ctx context.Context, store *storage.Store, agentInstance fantasy.Agent, messages []fantasy.Message, sessionMsgCount int) ([]fantasy.Message, error) {
-	if sessionMsgCount < maxMessagesBeforeCompaction {
-		return messages, nil
-	}
-
-	log.Printf("[compaction] Starting compaction (session has %d messages)", sessionMsgCount)
-
-	// Build conversation text for summarization
-	var conversationText strings.Builder
-	for _, msg := range messages {
-		role := strings.ToUpper(string(msg.Role))
-		content := serializeMessageContent(msg.Content)
-		conversationText.WriteString(fmt.Sprintf("[%s] %s\n", role, content))
-	}
-
-	// Generate summary using the agent
-	summaryPrompt := fmt.Sprintf(`Summarize the following conversation concisely. Capture the key topics discussed, any conclusions reached, and important context needed to continue naturally.
-
-Conversation:
-%s
-
-Provide a 1-2 sentence summary:`, conversationText.String())
-
-	result, err := agentInstance.Generate(ctx, fantasy.AgentCall{
-		Prompt:   summaryPrompt,
-		Messages: []fantasy.Message{messages[0]}, // Just system prompt
-	})
-	if err != nil {
-		log.Printf("[compaction] Failed to generate summary: %v", err)
-		return messages, nil // Don't compact on error
-	}
-
-	summary := strings.TrimSpace(result.Response.Content.Text())
-	log.Printf("[compaction] Summary: %s", truncate(summary, 100))
-
-	// Start new session with summary
-	_, err = store.CompactStart(summary)
-	if err != nil {
-		log.Printf("[compaction] Failed to start new session: %v", err)
-		return messages, nil
-	}
-
-	// Return only system + last few messages
-	if len(messages) > 4 {
-		return messages[len(messages)-4:], nil
-	}
-	return messages, nil
 }
 
 func truncate(s string, maxLen int) string {
