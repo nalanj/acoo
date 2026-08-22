@@ -94,7 +94,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	messages := []fantasy.Message{}
 	iteration := 0
 	maxIterations := 100
-	currentPrompt := taskPrompt
+	currentPrompt := taskPrompt + "\n\nWhen finished, respond with '<<<<<DONE>>>>>' on its own line."
 	compactionRetries := 0
 
 	for iteration < maxIterations {
