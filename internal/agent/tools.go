@@ -59,7 +59,6 @@ func EditFileTool() fantasy.AgentTool {
 			}
 			return fantasy.NewTextResponse("Content appended to file: " + input.Path), nil
 		}
-
 		if err := os.WriteFile(input.Path, []byte(input.Content), 0644); err != nil {
 			return fantasy.NewTextErrorResponse("Error writing file: " + err.Error()), nil
 		}
@@ -91,7 +90,6 @@ func BashTool() fantasy.AgentTool {
 		if err != nil {
 			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
 		}
-
 		return fantasy.NewTextResponse(string(output)), nil
 	}
 

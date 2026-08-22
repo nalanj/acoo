@@ -218,9 +218,15 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 		"--task-prompt", taskPrompt,
 		"--model", job.Model,
 		"--provider", job.Provider,
+		"--agent-name", r.Agent.Name,
 	}
 	if thinkingBudget := job.GetThinkingBudget(); thinkingBudget > 0 {
 		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
+	}
+
+	// Add compaction config (compaction is always enabled, only retain_tokens is configurable)
+	if job.Compaction.GetRetainTokens() != 20000 {
+		cmdArgs = append(cmdArgs, "--compaction-retain-tokens", fmt.Sprintf("%d", job.Compaction.GetRetainTokens()))
 	}
 
 	// Run in subprocess for environment isolation

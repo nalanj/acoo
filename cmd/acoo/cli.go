@@ -13,6 +13,15 @@ var (
 	verbose   bool
 )
 
+// defaultStateDir returns the default state directory
+func defaultStateDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "~/.local/share/acoo"
+	}
+	return filepath.Join(home, ".local", "share", "acoo")
+}
+
 // defaultAgentsDir returns the default agents directory
 func defaultAgentsDir() string {
 	home, err := os.UserHomeDir()
@@ -80,12 +89,21 @@ Example:
 	agentCmd.Flags().String("model", "", "Model")
 	agentCmd.Flags().String("provider", "", "Provider")
 	agentCmd.Flags().Int64("thinking-budget", 0, "Thinking budget in tokens (0 = disabled)")
+	agentCmd.Flags().String("agent-name", "", "Agent name (for session persistence)")
+	agentCmd.Flags().String("state-dir", "~/.local/share/acoo", "State directory")
 
 	providersCmd := &cobra.Command{
 		Use:   "providers",
 		Short: "List available LLM providers",
 		RunE:  listProviders,
 	}
+
+	dbCmd := &cobra.Command{
+		Use:   "db [agent-name]",
+		Short: "Inspect session storage",
+		RunE:  inspectDB,
+	}
+	dbCmd.Flags().String("state-dir", "~/.local/share/acoo", "State directory")
 
 	root := &cobra.Command{
 		Use:          "acoo",
@@ -107,6 +125,7 @@ Example:
 	root.AddCommand(startCmd)
 	root.AddCommand(agentCmd)
 	root.AddCommand(providersCmd)
+	root.AddCommand(dbCmd)
 
 	return root
 }

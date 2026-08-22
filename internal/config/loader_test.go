@@ -270,3 +270,55 @@ func TestLoadJobsNonexistent(t *testing.T) {
 		t.Errorf("LoadJobs() returned %d jobs, want 0", len(jobs))
 	}
 }
+
+func TestCompactionConfig(t *testing.T) {
+	tests := []struct {
+		name       string
+		config     CompactionConfig
+		wantRetain int
+	}{
+		{
+			name:       "zero value defaults to 20k",
+			config:     CompactionConfig{},
+			wantRetain: 20000,
+		},
+		{
+			name:       "custom retain tokens",
+			config:     CompactionConfig{RetainTokens: 15000},
+			wantRetain: 15000,
+		},
+		{
+			name:       "zero retain tokens uses default",
+			config:     CompactionConfig{RetainTokens: 0},
+			wantRetain: 20000,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.config.GetRetainTokens(); got != tt.wantRetain {
+				t.Errorf("GetRetainTokens() = %v, want %v", got, tt.wantRetain)
+			}
+		})
+	}
+}
+
+func TestJobCompactionConfig(t *testing.T) {
+	content := `---
+provider: openai
+model: gpt-4o
+compaction:
+  retain_tokens: 30000
+---
+
+Task with custom compaction.`
+
+	job, err := ParseJobContent(content, "test.md")
+	if err != nil {
+		t.Fatalf("ParseJobContent() error: %v", err)
+	}
+
+	if job.Compaction.GetRetainTokens() != 30000 {
+		t.Errorf("Compaction.RetainTokens = %d, want 30000", job.Compaction.GetRetainTokens())
+	}
+}
