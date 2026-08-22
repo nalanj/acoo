@@ -296,11 +296,17 @@ func serializeMessageContent(parts []fantasy.MessagePart) string {
 }
 
 func isDone(response string) bool {
+	// Check if DONE marker appears on its own line
 	for _, line := range strings.Split(response, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "<<<<<DONE>>>>>" {
 			return true
 		}
+	}
+	// Also check if response ends with DONE (model may not put it on its own line)
+	response = strings.TrimSpace(response)
+	if strings.HasSuffix(response, "<<<<<DONE>>>>>") {
+		return true
 	}
 	return false
 }
