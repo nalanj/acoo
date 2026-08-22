@@ -36,11 +36,11 @@ func (j *jsonLogger) log(level, message string, fields []log.Field) {
 	defer j.mu.Unlock()
 
 	entry := struct {
-		Timestamp string        `json:"timestamp"`
-		Scope     string        `json:"scope"`
-		Level     string        `json:"level"`
-		Message   string        `json:"message"`
-		Fields    []log.Field   `json:"fields,omitempty"`
+		Timestamp string      `json:"timestamp"`
+		Scope     string      `json:"scope"`
+		Level     string      `json:"level"`
+		Message   string      `json:"message"`
+		Fields    []log.Field `json:"fields,omitempty"`
 	}{
 		Timestamp: time.Now().Format(time.RFC3339),
 		Scope:     "system",
@@ -52,24 +52,15 @@ func (j *jsonLogger) log(level, message string, fields []log.Field) {
 	fmt.Fprintln(os.Stdout, string(data))
 }
 
-func (j *jsonLogger) Info(message string, fields ...log.Field) {
-	j.log("info", message, fields)
-}
-
-func (j *jsonLogger) Warn(message string, fields ...log.Field) {
-	j.log("warn", message, fields)
-}
-
-func (j *jsonLogger) Error(message string, fields ...log.Field) {
-	j.log("error", message, fields)
-}
+func (j *jsonLogger) Info(message string, fields ...log.Field) { j.log("info", message, fields) }
+func (j *jsonLogger) Warn(message string, fields ...log.Field)  { j.log("warn", message, fields) }
+func (j *jsonLogger) Error(message string, fields ...log.Field) { j.log("error", message, fields) }
 
 // runAgentSubprocess handles the "agent" subcommand for subprocess mode
 func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	systemPromptPath, _ := cmd.Flags().GetString("system-prompt-path")
 	systemPrompt := ""
 	if systemPromptPath != "" {
-		// Read system prompt from file
 		data, err := os.ReadFile(systemPromptPath)
 		if err != nil {
 			jsonlog.Error("read_system_prompt_failed", log.F("path", systemPromptPath), log.F("error", err))
@@ -77,11 +68,9 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 		}
 		systemPrompt = string(data)
 	} else {
-		// Fall back to command line flag
 		systemPrompt, _ = cmd.Flags().GetString("system-prompt")
 	}
 
-	// Read task prompt from file or flag
 	taskPromptPath, _ := cmd.Flags().GetString("task-prompt-path")
 	taskPrompt := ""
 	if taskPromptPath != "" {
@@ -94,6 +83,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	} else {
 		taskPrompt, _ = cmd.Flags().GetString("task-prompt")
 	}
+
 	model, _ := cmd.Flags().GetString("model")
 	providerName, _ := cmd.Flags().GetString("provider")
 	thinkingBudget, _ := cmd.Flags().GetInt64("thinking-budget")
@@ -101,13 +91,11 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	jobName, _ := cmd.Flags().GetString("job-name")
 	stateDir, _ := cmd.Flags().GetString("state-dir")
 
-	// Expand ~ in state dir
 	if strings.HasPrefix(stateDir, "~/") {
 		home, _ := os.UserHomeDir()
 		stateDir = filepath.Join(home, stateDir[2:])
 	}
 
-	// Create agent-specific store
 	store, err := storage.NewStore(stateDir, agentName)
 	if err != nil {
 		jsonlog.Error("create_store_failed", log.F("error", err))
@@ -118,30 +106,19 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	defer cancel()
 
-	// Create provider first (needed for compaction)
 	pf := provider.NewFactory()
 	lm, err := pf.CreateProvider(providerName, model, "")
 	if err != nil {
 		jsonlog.Error("create_provider_failed", log.F("error", err))
 		return fmt.Errorf("creating provider: %w", err)
 	}
-	_ = lm // Used for compaction later
 
-	// systemPrompt is already the full prompt (read from file)
-	// Save system prompt only if different from current (and current is not empty)
-	existingPrompt, _ := store.GetSystemPrompt()
-	if existingPrompt != "" && existingPrompt != systemPrompt {
-		store.SaveSystemPrompt(systemPrompt)
-	}
-
-	// Build agent options (tools are still needed for execution)
 	tools := agent.Tools()
 	agentOptions := []fantasy.AgentOption{
 		fantasy.WithSystemPrompt(systemPrompt),
 		fantasy.WithTools(tools...),
 	}
 
-	// Add thinking option if configured (for anthropic-compatible providers)
 	if thinkingBudget > 0 {
 		opts := anthropic.NewProviderOptions(&anthropic.ProviderOptions{
 			Thinking: &anthropic.ThinkingProviderOption{
@@ -151,13 +128,10 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 		agentOptions = append(agentOptions, fantasy.WithProviderOptions(opts))
 	}
 
-	// Create agent with tools
-	agentInstance := fantasy.NewAgent(
-		lm,
-		agentOptions...,
-	)
+	agentInstance := fantasy.NewAgent(lm, agentOptions...)
 
-	// Build conversation
+	jsonlog.Info("job_started", log.F("job", jobName), log.F("model", model))
+
 	messages := []fantasy.Message{}
 	iteration := 0
 	maxIterations := 100
@@ -166,36 +140,87 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 
 	for iteration < maxIterations {
 		iteration++
-		if iteration == 1 {
-			jsonlog.Info("job_started", log.F("job", jobName), log.F("model", model))
-		}
 
-		// Save user message
 		store.AddMessage(storage.Message{
 			Role:      "user",
 			Content:   currentPrompt,
 			Timestamp: time.Now(),
 		})
 
-		result, err := agentInstance.Generate(ctx, fantasy.AgentCall{
+		// Track text for this turn
+		var textBuilder strings.Builder
+
+		result, err := agentInstance.Stream(ctx, fantasy.AgentStreamCall{
 			Prompt:   currentPrompt,
 			Messages: messages,
+			OnTextDelta: func(id, text string) error {
+				fmt.Print(text)
+				textBuilder.WriteString(text)
+				return nil
+			},
+			OnReasoningDelta: func(id, text string) error {
+				// Could print thinking with a different marker if wanted
+				return nil
+			},
+			OnStepFinish: func(step fantasy.StepResult) error {
+				// Save assistant message
+				text := textBuilder.String()
+				if text != "" {
+					store.AddMessage(storage.Message{
+						Role:      "assistant",
+						Content:   text,
+						Timestamp: time.Now(),
+					})
+				}
+
+				// Save tool messages from step
+				for _, msg := range step.Messages {
+					var role, content string
+					var toolName string
+
+					switch msg.Role {
+					case fantasy.MessageRoleUser:
+						role = "user"
+						content = serializeMessageContent(msg.Content)
+					case fantasy.MessageRoleAssistant:
+						role = "assistant"
+						content = serializeMessageContent(msg.Content)
+					case fantasy.MessageRoleTool:
+						role = "tool"
+						content = serializeMessageContent(msg.Content)
+						for _, part := range msg.Content {
+							if tc, ok := fantasy.AsMessagePart[fantasy.ToolCallPart](part); ok {
+								toolName = tc.ToolName
+								break
+							}
+						}
+					default:
+						continue
+					}
+
+					store.AddMessage(storage.Message{
+						Role:      role,
+						ToolName:  toolName,
+						Content:   content,
+						Timestamp: time.Now(),
+					})
+				}
+				return nil
+			},
 		})
+
 		if err != nil {
-			// Check for context too large error
 			var provErr *fantasy.ProviderError
 			if errors.As(err, &provErr) && provErr.IsContextTooLarge() {
 				if compactionRetries < maxCompactionRetries {
 					jsonlog.Info("compaction_start", log.F("reason", "context_too_large"))
 
-					// Get message count for summary
 					meta, _ := store.GetMetadata()
 					msgCount := 0
 					if meta != nil {
 						msgCount = meta.MessageCount
 					}
 
-					// Generate summary and compact
 					summary := generateSummary(ctx, lm, systemPrompt, msgCount)
 					_, err := store.CompactStart(summary)
 					if err != nil {
@@ -204,59 +229,32 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 					}
 
 					compactionRetries++
-					messages = nil // Clear messages, start fresh
-					continue // Retry with empty context
+					messages = nil
+					continue
 				}
 				return fmt.Errorf("context overflow: %w", err)
 			}
 			return fmt.Errorf("agent error: %w", err)
+	}
+
+		// Check for done using the last response
+		response := textBuilder.String()
+		if result != nil && result.Response.Content.Text() != "" {
+			response = result.Response.Content.Text()
 		}
 
-		response := strings.TrimSpace(result.Response.Content.Text())
-
-		// Save messages from steps (includes tool calls and results)
-		for _, step := range result.Steps {
-			for _, msg := range step.Messages {
-				var role string
-				var content string
-				var toolName string
-
-				switch msg.Role {
-				case fantasy.MessageRoleUser:
-					role = "user"
-					content = serializeMessageContent(msg.Content)
-				case fantasy.MessageRoleAssistant:
-					role = "assistant"
-					content = serializeMessageContent(msg.Content)
-				case fantasy.MessageRoleTool:
-					role = "tool"
-					content = serializeMessageContent(msg.Content)
-					for _, part := range msg.Content {
-						if tc, ok := fantasy.AsMessagePart[fantasy.ToolCallPart](part); ok {
-							toolName = tc.ToolName
-							break
-						}
-					}
-				default:
-					continue
-				}
-
-				store.AddMessage(storage.Message{
-					Role:      role,
-					ToolName:  toolName,
-					Content:   content,
-					Timestamp: time.Now(),
-				})
-			}
-		}
-
-		// Check for done
 		if isDone(response) {
 			jsonlog.Info("job_complete", log.F("job", jobName))
 			return nil
 		}
 
-		// Add to messages
+		// Build messages for next iteration
+		messages = append(messages, fantasy.Message{
+			Role: fantasy.MessageRoleUser,
+			Content: []fantasy.MessagePart{
+				&fantasy.TextPart{Text: currentPrompt},
+			},
+		})
 		messages = append(messages, fantasy.Message{
 			Role: fantasy.MessageRoleAssistant,
 			Content: []fantasy.MessagePart{
@@ -270,7 +268,6 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	return fmt.Errorf("max iterations reached")
 }
 
-// serializeMessageContent serializes message content to a string
 func serializeMessageContent(parts []fantasy.MessagePart) string {
 	var result strings.Builder
 	for _, part := range parts {
@@ -298,7 +295,6 @@ func serializeMessageContent(parts []fantasy.MessagePart) string {
 	return strings.TrimSpace(result.String())
 }
 
-// isDone checks if the response indicates the agent is done
 func isDone(response string) bool {
 	for _, line := range strings.Split(response, "\n") {
 		line = strings.TrimSpace(line)
@@ -309,14 +305,6 @@ func isDone(response string) bool {
 	return false
 }
 
-func truncate(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
-}
-
-// generateSummary uses the LLM to summarize prior conversation
 func generateSummary(ctx context.Context, lm fantasy.LanguageModel, systemPrompt string, messageCount int) string {
 	summaryPrompt := fmt.Sprintf(`You are summarizing a conversation. The conversation had %d messages. The system prompt is: %s. Provide a brief 1-2 sentence summary of what this conversation covered.`, messageCount, systemPrompt)
 
