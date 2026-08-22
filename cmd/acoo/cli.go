@@ -93,6 +93,7 @@ Example:
 	agentCmd.Flags().Int64("thinking-budget", 0, "Thinking budget in tokens (0 = disabled)")
 	agentCmd.Flags().String("agent-name", "", "Agent name (for session persistence)")
 	agentCmd.Flags().String("job-name", "", "Job name (for logging)")
+	agentCmd.Flags().String("log-format", "text", "Log format: text or json")
 	agentCmd.Flags().String("state-dir", "~/.local/share/acoo", "State directory")
 
 	providersCmd := &cobra.Command{

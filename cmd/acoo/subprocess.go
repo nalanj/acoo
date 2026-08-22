@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -22,6 +24,46 @@ import (
 
 const maxCompactionRetries = 1 // Max compaction attempts before giving up
 
+// jsonlog is a JSON logger for subprocess output to stdout
+var jsonlog = &jsonLogger{}
+
+type jsonLogger struct {
+	mu sync.Mutex
+}
+
+func (j *jsonLogger) log(level, message string, fields []log.Field) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	entry := struct {
+		Timestamp string        `json:"timestamp"`
+		Scope     string        `json:"scope"`
+		Level     string        `json:"level"`
+		Message   string        `json:"message"`
+		Fields    []log.Field   `json:"fields,omitempty"`
+	}{
+		Timestamp: time.Now().Format(time.RFC3339),
+		Scope:     "system",
+		Level:     level,
+		Message:   message,
+		Fields:    fields,
+	}
+	data, _ := json.Marshal(entry)
+	fmt.Fprintln(os.Stdout, string(data))
+}
+
+func (j *jsonLogger) Info(message string, fields ...log.Field) {
+	j.log("info", message, fields)
+}
+
+func (j *jsonLogger) Warn(message string, fields ...log.Field) {
+	j.log("warn", message, fields)
+}
+
+func (j *jsonLogger) Error(message string, fields ...log.Field) {
+	j.log("error", message, fields)
+}
+
 // runAgentSubprocess handles the "agent" subcommand for subprocess mode
 func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	systemPromptPath, _ := cmd.Flags().GetString("system-prompt-path")
@@ -30,7 +72,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 		// Read system prompt from file
 		data, err := os.ReadFile(systemPromptPath)
 		if err != nil {
-			log.System().Error("read_system_prompt_failed", log.F("path", systemPromptPath), log.F("error", err))
+			jsonlog.Error("read_system_prompt_failed", log.F("path", systemPromptPath), log.F("error", err))
 			return fmt.Errorf("reading system prompt from %s: %w", systemPromptPath, err)
 		}
 		systemPrompt = string(data)
@@ -45,7 +87,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	if taskPromptPath != "" {
 		data, err := os.ReadFile(taskPromptPath)
 		if err != nil {
-			log.System().Error("read_task_prompt_failed", log.F("path", taskPromptPath), log.F("error", err))
+			jsonlog.Error("read_task_prompt_failed", log.F("path", taskPromptPath), log.F("error", err))
 			return fmt.Errorf("reading task prompt from %s: %w", taskPromptPath, err)
 		}
 		taskPrompt = string(data)
@@ -67,7 +109,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	// Create agent-specific store
 	store, err := storage.NewStore(stateDir, agentName)
 	if err != nil {
-		log.System().Error("create_store_failed", log.F("error", err))
+		jsonlog.Error("create_store_failed", log.F("error", err))
 		return fmt.Errorf("opening storage: %w", err)
 	}
 	defer store.Close()
@@ -79,7 +121,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	pf := provider.NewFactory()
 	lm, err := pf.CreateProvider(providerName, model, "")
 	if err != nil {
-		log.System().Error("create_provider_failed", log.F("error", err))
+		jsonlog.Error("create_provider_failed", log.F("error", err))
 		return fmt.Errorf("creating provider: %w", err)
 	}
 	_ = lm // Used for compaction later
@@ -125,7 +167,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 		iteration++
 		if iteration == 1 {
 			jobName, _ := cmd.Flags().GetString("job-name")
-			log.System().Info("job_started", log.F("job", jobName), log.F("model", model))
+			jsonlog.Info("job_started", log.F("job", jobName), log.F("model", model))
 		}
 
 		// Save user message
@@ -144,8 +186,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 			var provErr *fantasy.ProviderError
 			if errors.As(err, &provErr) && provErr.IsContextTooLarge() {
 				if compactionRetries < maxCompactionRetries {
-					slog := log.System()
-					slog.Info("compaction_start", log.F("reason", "context_too_large"))
+					jsonlog.Info("compaction_start", log.F("reason", "context_too_large"))
 
 					// Get message count for summary
 					meta, _ := store.GetMetadata()
@@ -158,7 +199,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 					summary := generateSummary(ctx, lm, systemPrompt, msgCount)
 					_, err := store.CompactStart(summary)
 					if err != nil {
-						slog.Error("compaction_failed", log.F("error", err))
+						jsonlog.Error("compaction_failed", log.F("error", err))
 						return fmt.Errorf("context overflow after compaction: %w", err)
 					}
 
@@ -285,7 +326,7 @@ func generateSummary(ctx context.Context, lm fantasy.LanguageModel, systemPrompt
 		},
 	})
 	if err != nil {
-		log.System().Error("summary_failed", log.F("error", err))
+		jsonlog.Error("summary_failed", log.F("error", err))
 		return "Conversation summary unavailable"
 	}
 
