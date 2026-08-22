@@ -60,7 +60,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	tools := agent.Tools()
 	home, _ := os.UserHomeDir()
 	workspace := filepath.Join(home, ".local", "share", "acoo", agentName, "workspace")
-	fullSystemPrompt := agent.BuildSystemPrompt(systemPrompt, tools, workspace)
+	fullSystemPrompt := agent.BuildSystemPrompt(systemPrompt, agentName, tools, workspace)
 
 	// Save system prompt only if different from current (and current is not empty)
 	existingPrompt, _ := store.GetSystemPrompt()

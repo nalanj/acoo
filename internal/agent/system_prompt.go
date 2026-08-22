@@ -8,14 +8,20 @@ import (
 )
 
 // BuildSystemPrompt composes the full system prompt from agent body and available tools
-func BuildSystemPrompt(agentBody string, tools []fantasy.AgentTool, workspacePath string) string {
+func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.AgentTool, workspacePath string) string {
 	var parts []string
+
+	// Agent identity
+	if agentName != "" {
+		parts = append(parts, fmt.Sprintf("Your name is %s.", agentName))
+	}
 
 	// Agent body
 	if agentBody != "" {
+		if len(parts) > 0 {
+			parts = append(parts, "")
+		}
 		parts = append(parts, strings.TrimSpace(agentBody))
-	} else {
-		parts = append(parts, "You are a helpful AI assistant.")
 	}
 
 	// Workspace guidance
