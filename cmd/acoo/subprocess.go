@@ -98,6 +98,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	providerName, _ := cmd.Flags().GetString("provider")
 	thinkingBudget, _ := cmd.Flags().GetInt64("thinking-budget")
 	agentName, _ := cmd.Flags().GetString("agent-name")
+	jobName, _ := cmd.Flags().GetString("job-name")
 	stateDir, _ := cmd.Flags().GetString("state-dir")
 
 	// Expand ~ in state dir
@@ -166,7 +167,6 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	for iteration < maxIterations {
 		iteration++
 		if iteration == 1 {
-			jobName, _ := cmd.Flags().GetString("job-name")
 			jsonlog.Info("job_started", log.F("job", jobName), log.F("model", model))
 		}
 
@@ -213,7 +213,6 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 		}
 
 		response := strings.TrimSpace(result.Response.Content.Text())
-		fmt.Println(response)
 
 		// Save messages from steps (includes tool calls and results)
 		for _, step := range result.Steps {
@@ -253,6 +252,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 
 		// Check for done
 		if isDone(response) {
+			jsonlog.Info("job_complete", log.F("job", jobName))
 			return nil
 		}
 
