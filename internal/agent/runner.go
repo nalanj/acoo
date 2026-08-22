@@ -98,7 +98,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 	sched := r.schedule[jobName]
 	job := r.Agent.JobsMap[jobName]
 
-	r.Logger.Info("job_started", log.F("job", jobName), log.F("schedule", sched.Spec))
+	r.Logger.Info("job_loaded", log.F("job", jobName), log.F("schedule", sched.Spec))
 
 	// Run immediately for @once
 	if sched.IsOneShot() {
