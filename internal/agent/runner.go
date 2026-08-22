@@ -177,11 +177,15 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 		output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 		if err != nil {
 			outputStr := strings.TrimSpace(string(output))
-			if outputStr != "" {
-				r.Logger.Info("precondition_failed", log.F("job", job.Name), log.F("command", cmd), log.F("output", outputStr))
-			} else {
-				r.Logger.Info("precondition_failed", log.F("job", job.Name), log.F("command", cmd))
+			exitCode := -1
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
 			}
+			fields := []log.Field{log.F("job", job.Name), log.F("command", cmd), log.F("exit", exitCode)}
+			if outputStr != "" {
+				fields = append(fields, log.F("output", outputStr))
+			}
+			r.Logger.Info("precondition_failed", fields...)
 			return false
 		}
 	}
