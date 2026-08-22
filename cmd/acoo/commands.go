@@ -240,6 +240,7 @@ func testAgent(cmd *cobra.Command, args []string) error {
 		"--model", job.Model,
 		"--provider", job.Provider,
 		"--agent-name", agentName,
+		"--job-name", jobName,
 	}
 	if thinkingBudget := job.GetThinkingBudget(); thinkingBudget > 0 {
 		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
