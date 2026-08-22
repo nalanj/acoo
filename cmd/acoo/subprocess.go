@@ -149,6 +149,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 
 		// Track text for this turn
 		var textBuilder strings.Builder
+		var inThinking bool
 
 		result, err := agentInstance.Stream(ctx, fantasy.AgentStreamCall{
 			Prompt:   currentPrompt,
@@ -159,7 +160,30 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 				return nil
 			},
 			OnReasoningDelta: func(id, text string) error {
-				// Could print thinking with a different marker if wanted
+				if !inThinking {
+					fmt.Print("\n[thinking] ")
+					inThinking = true
+				}
+				fmt.Print(text)
+				return nil
+			},
+			OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
+				if inThinking {
+					fmt.Println(" [/thinking]")
+					inThinking = false
+				}
+				return nil
+			},
+			OnToolCall: func(call fantasy.ToolCallContent) error {
+				fmt.Printf("\n[tool] %s(%s)\n", call.ToolName, call.Input)
+				return nil
+			},
+			OnToolResult: func(result fantasy.ToolResultContent) error {
+				resultStr := fmt.Sprintf("%v", result.Result)
+				if len(resultStr) > 500 {
+					resultStr = resultStr[:500] + "..."
+				}
+				fmt.Printf("[result] %s\n", resultStr)
 				return nil
 			},
 			OnStepFinish: func(step fantasy.StepResult) error {
