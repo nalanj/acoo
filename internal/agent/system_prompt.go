@@ -24,6 +24,7 @@ func BuildSystemPrompt(agentBody string, tools []fantasy.AgentTool) string {
 			info := tool.Info()
 			parts = append(parts, info.Name+" - "+info.Description)
 		}
+		parts = append(parts, "", "Prefer direct tools over bash when possible. For example, use glob to find files by name rather than 'find' or 'ls' commands.")
 	}
 
 	return strings.Join(parts, "\n")
