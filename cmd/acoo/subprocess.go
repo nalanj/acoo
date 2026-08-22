@@ -24,7 +24,20 @@ const maxCompactionRetries = 1 // Max compaction attempts before giving up
 
 // runAgentSubprocess handles the "agent" subcommand for subprocess mode
 func runAgentSubprocess(cmd *cobra.Command, args []string) error {
-	systemPrompt, _ := cmd.Flags().GetString("system-prompt")
+	systemPromptPath, _ := cmd.Flags().GetString("system-prompt-path")
+	systemPrompt := ""
+	if systemPromptPath != "" {
+		// Read system prompt from file
+		data, err := os.ReadFile(systemPromptPath)
+		if err != nil {
+			return fmt.Errorf("reading system prompt from %s: %w", systemPromptPath, err)
+		}
+		systemPrompt = string(data)
+	} else {
+		// Fall back to command line flag
+		systemPrompt, _ = cmd.Flags().GetString("system-prompt")
+	}
+
 	taskPrompt, _ := cmd.Flags().GetString("task-prompt")
 	model, _ := cmd.Flags().GetString("model")
 	providerName, _ := cmd.Flags().GetString("provider")
@@ -56,21 +69,17 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	}
 	_ = lm // Used for compaction later
 
-	// Build system prompt with tools and workspace
-	tools := agent.Tools()
-	home, _ := os.UserHomeDir()
-	workspace := filepath.Join(home, ".local", "share", "acoo", agentName, "workspace")
-	fullSystemPrompt := agent.BuildSystemPrompt(systemPrompt, agentName, tools, workspace)
-
+	// systemPrompt is already the full prompt (read from file)
 	// Save system prompt only if different from current (and current is not empty)
 	existingPrompt, _ := store.GetSystemPrompt()
-	if existingPrompt != "" && existingPrompt != fullSystemPrompt {
-		store.SaveSystemPrompt(fullSystemPrompt)
+	if existingPrompt != "" && existingPrompt != systemPrompt {
+		store.SaveSystemPrompt(systemPrompt)
 	}
 
-	// Build agent options
+	// Build agent options (tools are still needed for execution)
+	tools := agent.Tools()
 	agentOptions := []fantasy.AgentOption{
-		fantasy.WithSystemPrompt(fullSystemPrompt),
+		fantasy.WithSystemPrompt(systemPrompt),
 		fantasy.WithTools(tools...),
 	}
 

@@ -85,6 +85,7 @@ Example:
 		RunE:  runAgentSubprocess,
 	}
 	agentCmd.Flags().String("system-prompt", "", "System prompt")
+	agentCmd.Flags().String("system-prompt-path", "", "Path to system prompt file")
 	agentCmd.Flags().String("task-prompt", "", "Task prompt")
 	agentCmd.Flags().String("model", "", "Model")
 	agentCmd.Flags().String("provider", "", "Provider")
