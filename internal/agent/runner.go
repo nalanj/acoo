@@ -186,7 +186,9 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 			r.mu.Lock()
 			r.running[jobName] = false
 			r.mu.Unlock()
-			sched.NextRun()
+			sched.NextRun() // Advance to next interval even on precondition failure
+			// Sleep briefly before retrying
+			time.Sleep(time.Second)
 			continue
 		}
 
