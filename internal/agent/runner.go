@@ -358,12 +358,11 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 	}
 
 	if err != nil {
-		r.Logger.Error("subprocess_failed", log.F("job", jobName), log.F("error", err))
-		r.Logger.Info("subprocess_output", log.F("job", jobName), log.F("output", string(output)))
+		r.Logger.Error("subprocess_failed", log.F("job", jobName), log.F("exit_code", exitCode))
 		return
 	}
 
-	r.Logger.Info("job_complete", log.F("job", jobName), log.F("result", truncate(string(output), 200)))
+	r.Logger.Info("job_complete", log.F("job", jobName))
 }
 
 // truncate truncates a string to maxLen, adding ellipsis if truncated
