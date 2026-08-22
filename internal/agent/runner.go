@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,22 +20,29 @@ type Runner struct {
 	Agent *config.Agent
 	Logger *log.Logger
 
-	schedule map[string]*scheduler.Schedule // job name -> schedule
-	running map[string]bool // job name -> is running
-	jobCancelFuncs map[string]context.CancelFunc // job name -> cancel
-	wg sync.WaitGroup
-	mu sync.Mutex
-	started bool
+	schedule      map[string]*scheduler.Schedule      // job name -> schedule
+	running       map[string]bool                    // job name -> is running
+	jobCancelFuncs map[string]context.CancelFunc     // job name -> cancel
+	workspace     string                             // working directory for agent
+	wg            sync.WaitGroup
+	mu            sync.Mutex
+	started       bool
 }
 
 // NewRunner creates a new agent runner
 func NewRunner(agent *config.Agent, logger *log.Logger) *Runner {
+	// Workspace at ~/.local/share/acoo/{agent}/workspace
+	home, _ := os.UserHomeDir()
+	shareDir := filepath.Join(home, ".local", "share", "acoo")
+	workspace := filepath.Join(shareDir, agent.Name, "workspace")
+
 	return &Runner{
 		Agent:          agent,
 		Logger:         logger,
 		schedule:      make(map[string]*scheduler.Schedule),
 		running:       make(map[string]bool),
 		jobCancelFuncs: make(map[string]context.CancelFunc),
+		workspace:     workspace,
 	}
 }
 
@@ -197,6 +205,12 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 func (r *Runner) executeJob(jobName string, job *config.Job) {
 	r.Logger.Info("job_starting", log.F("job", job.Name))
 
+	// Ensure workspace exists
+	if err := os.MkdirAll(r.workspace, 0755); err != nil {
+		r.Logger.Error("create_workspace_failed", log.F("job", job.Name), log.F("workspace", r.workspace), log.F("error", err))
+		return
+	}
+
 	// Build system prompt from agent body
 	systemPrompt := r.Agent.Body
 	if systemPrompt == "" {
@@ -237,6 +251,7 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 	// Run in subprocess for environment isolation
 	cmd := exec.Command(execPath, cmdArgs...)
 	cmd.Env = env
+	cmd.Dir = r.workspace
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
