@@ -30,6 +30,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 		// Read system prompt from file
 		data, err := os.ReadFile(systemPromptPath)
 		if err != nil {
+			log.System().Error("read_system_prompt_failed", log.F("path", systemPromptPath), log.F("error", err))
 			return fmt.Errorf("reading system prompt from %s: %w", systemPromptPath, err)
 		}
 		systemPrompt = string(data)
@@ -54,6 +55,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	// Create agent-specific store
 	store, err := storage.NewStore(stateDir, agentName)
 	if err != nil {
+		log.System().Error("create_store_failed", log.F("error", err))
 		return fmt.Errorf("opening storage: %w", err)
 	}
 	defer store.Close()
@@ -65,6 +67,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	pf := provider.NewFactory()
 	lm, err := pf.CreateProvider(providerName, model, "")
 	if err != nil {
+		log.System().Error("create_provider_failed", log.F("error", err))
 		return fmt.Errorf("creating provider: %w", err)
 	}
 	_ = lm // Used for compaction later

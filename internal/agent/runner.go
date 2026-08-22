@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -310,7 +311,18 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 	cmd.Env = env
 	cmd.Dir = r.workspace
 
+	r.Logger.Info("subprocess_started", log.F("job", job.Name), log.F("executable", execPath), log.F("dir", r.workspace))
+
 	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			r.Logger.Error("subprocess_failed", log.F("job", job.Name), log.F("exit_code", exitErr.ExitCode()))
+		} else {
+			r.Logger.Error("subprocess_failed", log.F("job", job.Name), log.F("error", err))
+		}
+	}
 
 	// Record job run
 	finishTime := time.Now()
