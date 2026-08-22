@@ -11,6 +11,11 @@ import (
 func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.AgentTool, skills []Skill, workspacePath string) string {
 	var parts []string
 
+	// SKILLS AT THE TOP - before agent body, before everything
+	if len(skills) > 0 {
+		parts = append(parts, BuildSkillsSection(skills))
+	}
+
 	// Agent identity
 	if agentName != "" {
 		parts = append(parts, fmt.Sprintf("Your name is %s.", agentName))
@@ -39,7 +44,7 @@ func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.Agent
 		parts = append(parts, "", "Prefer direct tools over bash when possible. For example, use glob to find files by name rather than 'find' or 'ls' commands.")
 	}
 
-	// Skills section
+	// Skills section - AFTER agent body and tools
 	if len(skills) > 0 {
 		parts = append(parts, "", BuildSkillsSection(skills))
 	}

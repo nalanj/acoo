@@ -64,6 +64,7 @@ func loadSkill(path string) (Skill, error) {
 	// Parse frontmatter
 	name := extractFrontmatterField(content, "name")
 	description := extractFrontmatterField(content, "description")
+	allowedTools := extractFrontmatterField(content, "allowed-tools")
 	body := extractBody(content)
 
 	if name == "" {
@@ -71,6 +72,11 @@ func loadSkill(path string) (Skill, error) {
 	}
 	if description == "" {
 		description = "No description"
+	}
+
+	// Append allowed tools to description if present
+	if allowedTools != "" {
+		description = description + " [Use: " + allowedTools + "]"
 	}
 
 	return Skill{
@@ -145,13 +151,8 @@ func BuildSkillsSection(skills []Skill) string {
 	}
 
 	var lines []string
-	lines = append(lines, "", "## SPECIALIST SKILLS", "")
-	lines = append(lines, "You have access to specialist skills that contain detailed knowledge and step-by-step instructions for specific task types. These skills are listed below in the <available_skills> section.", "")
-	lines = append(lines, "MANDATORY: When a task matches a skill's description, you MUST load the SKILL.md file at the listed location using your file-read tool and follow its instructions. Do not attempt to answer from general knowledge alone.", "")
-	lines = append(lines, "How to use a skill:")
-	lines = append(lines, "1. Read the SKILL.md file at the skill's location")
-	lines = append(lines, "2. Follow the instructions in that file exactly")
-	lines = append(lines, "3. Use the tools and patterns described in the skill", "")
+	lines = append(lines, "Here are the skills available to you:")
+	lines = append(lines, "")
 	lines = append(lines, "<available_skills>")
 
 	for _, skill := range skills {
@@ -163,6 +164,8 @@ func BuildSkillsSection(skills []Skill) string {
 	}
 
 	lines = append(lines, "</available_skills>")
+	lines = append(lines, "")
+	lines = append(lines, "If a skill seems applicable, use the read tool to read the full skill at its given path.")
 
 	return strings.Join(lines, "\n")
 }
