@@ -100,7 +100,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	for iteration < maxIterations {
 		iteration++
 		if iteration == 1 {
-			log.System().Info("agent_run_start", log.F("agent", agentName), log.F("model", model))
+			log.System().Info("job_started", log.F("agent", agentName), log.F("model", model))
 		}
 
 		// Save user message
