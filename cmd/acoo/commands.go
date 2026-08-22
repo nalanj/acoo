@@ -229,10 +229,13 @@ func testAgent(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("finding executable: %w", err)
 	}
 
-	systemPrompt := agentConfig.Body
-	if systemPrompt == "" {
-		systemPrompt = "You are a helpful AI assistant."
-	}
+	// Build full system prompt with skills
+	home, _ := os.UserHomeDir()
+	configDir := filepath.Join(home, ".config", "acoo")
+	skillsDir := filepath.Join(configDir, "skills")
+	tools := agent.Tools()
+	skills := agent.Skills(skillsDir)
+	systemPrompt := agent.BuildSystemPrompt(agentConfig.Body, agentName, tools, skills, "")
 
 	cmdArgs := []string{"agent",
 		"--system-prompt", systemPrompt,

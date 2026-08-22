@@ -151,7 +151,10 @@ func BuildSkillsSection(skills []Skill) string {
 	}
 
 	var lines []string
+	lines = append(lines, "")
 	lines = append(lines, "Here are the skills available to you:")
+	lines = append(lines, "")
+	lines = append(lines, "Skills contain specialized knowledge and step-by-step workflows for tasks you may not know how to perform from general knowledge alone. Each skill provides detailed instructions, commands, and best practices.")
 	lines = append(lines, "")
 	lines = append(lines, "<available_skills>")
 
@@ -165,7 +168,7 @@ func BuildSkillsSection(skills []Skill) string {
 
 	lines = append(lines, "</available_skills>")
 	lines = append(lines, "")
-	lines = append(lines, "If a skill seems applicable, use the read tool to read the full skill at its given path.")
+	lines = append(lines, "IMPORTANT: When a task matches a skill's purpose, you MUST read the skill file first using the read tool.")
 
 	return strings.Join(lines, "\n")
 }
