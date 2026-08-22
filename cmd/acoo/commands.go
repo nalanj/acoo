@@ -77,7 +77,10 @@ func runAgentOnce(name string) error {
 	}
 
 	logger := log.Agent(target.Name)
-	runner := agent.NewRunner(target, logger)
+	runner, err := agent.NewRunner(target, logger)
+	if err != nil {
+		return fmt.Errorf("creating runner: %w", err)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()

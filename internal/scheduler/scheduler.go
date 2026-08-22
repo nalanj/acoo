@@ -17,6 +17,7 @@ type Schedule struct {
 	Interval time.Duration
 	Cron     cron.Schedule
 	Next     time.Time
+	LastRun  time.Time // Last time this job was run
 }
 
 // ScheduleType indicates the type of schedule
@@ -33,21 +34,37 @@ var EveryRegex = regexp.MustCompile(`^@every\s+(\d+(?:ms|[smhd])+)`)
 
 // Parse parses a schedule string into a Schedule
 func Parse(spec string) (*Schedule, error) {
+	return ParseWithLastRun(spec, time.Time{})
+}
+
+// ParseWithLastRun parses a schedule string with a known last run time
+func ParseWithLastRun(spec string, lastRun time.Time) (*Schedule, error) {
 	spec = strings.TrimSpace(spec)
 
 	switch {
 	case spec == "@once":
 		return &Schedule{
-			Spec: spec,
-			Type: ScheduleTypeOnce,
-			Next: time.Now(),
+			Spec:    spec,
+			Type:    ScheduleTypeOnce,
+			Next:    time.Now(),
+			LastRun: lastRun,
 		}, nil
 
 	case strings.HasPrefix(spec, "@every "):
-		return parseInterval(spec)
+		sched, err := parseInterval(spec)
+		if err != nil {
+			return nil, err
+		}
+		sched.LastRun = lastRun
+		return sched, nil
 
 	default:
-		return parseCron(spec)
+		sched, err := parseCron(spec)
+		if err != nil {
+			return nil, err
+		}
+		sched.LastRun = lastRun
+		return sched, nil
 	}
 }
 
@@ -99,7 +116,17 @@ func (s *Schedule) NextRun() time.Time {
 	case ScheduleTypeCron:
 		s.Next = s.Cron.Next(now)
 	case ScheduleTypeInterval:
-		s.Next = now.Add(s.Interval)
+		if s.LastRun.IsZero() {
+			// Never run - run immediately
+			s.Next = now
+		} else {
+			// Resume from last run + interval
+			s.Next = s.LastRun.Add(s.Interval)
+			if s.Next.Before(now) {
+				// We've fallen behind, run immediately
+				s.Next = now
+			}
+		}
 	case ScheduleTypeOnce:
 		// One-shot schedules don't advance
 	}

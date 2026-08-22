@@ -93,15 +93,16 @@ func TestParseOnce(t *testing.T) {
 }
 
 func TestScheduleNextRun(t *testing.T) {
-	// Test interval schedule
-	s, _ := Parse("@every 1h")
+	// Test interval schedule with known last run (resuming)
+	lastRun := time.Now().Add(-2 * time.Hour) // Last ran 2 hours ago
+	s, _ := ParseWithLastRun("@every 1h", lastRun)
 	before := time.Now()
 	_ = s.NextRun()
 
-	// Next run should be approximately 1 hour from now
-	expectedStart := before.Add(time.Hour)
-	if s.Next.Before(expectedStart.Add(-time.Second)) || s.Next.After(expectedStart.Add(time.Second)) {
-		t.Errorf("NextRun() = %v, want approximately %v", s.Next, expectedStart)
+	// Next run should be approximately 1 hour from last run (1 hour from 2 hours ago = 1 hour ago)
+	// Since we've fallen behind, it should run immediately (within 1 second of now)
+	if s.Next.After(before.Add(time.Second)) {
+		t.Errorf("NextRun() = %v, want within 1s of %v (should run immediately when behind)", s.Next, before)
 	}
 
 	// Verify time didn't go backwards (NextRun advances)
@@ -109,6 +110,19 @@ func TestScheduleNextRun(t *testing.T) {
 	_ = s.NextRun()
 	if s.Next.Before(nextBeforeAdvancing) {
 		t.Error("NextRun() went backwards")
+	}
+}
+
+func TestScheduleNextRunNeverRun(t *testing.T) {
+	// Test interval schedule with no last run (never run before)
+	// Should run immediately
+	s, _ := Parse("@every 1h")
+	before := time.Now()
+	_ = s.NextRun()
+
+	// Should run immediately since never run (within 1 second of now)
+	if s.Next.After(before.Add(time.Second)) {
+		t.Errorf("NextRun() = %v, want immediately (never run before)", s.Next)
 	}
 }
 

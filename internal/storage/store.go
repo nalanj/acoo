@@ -39,6 +39,19 @@ type Metadata struct {
 	SessionNumber    int       `json:"session_number"`
 }
 
+// JobRun represents a single job execution
+type JobRun struct {
+	ID          string    `json:"id"`
+	JobName     string    `json:"job_name"`
+	StartedAt   time.Time `json:"started_at"`
+	FinishedAt  time.Time `json:"finished_at"`
+	Success     bool      `json:"success"`
+	Output      string    `json:"output,omitempty"`
+	ExitCode    int       `json:"exit_code,omitempty"`
+}
+
+const maxJobHistory = 1000 // Maximum number of job runs to keep per agent
+
 // NewStore creates a store in the given directory for the given agent
 func NewStore(dir, agentName string) (*Store, error) {
 	// Ensure directory exists
@@ -427,4 +440,142 @@ func extractSessionNum(path string) int {
 		return num
 	}
 	return 0
+}
+
+// jobHistoryPath returns the path to the job history file
+func (s *Store) jobHistoryPath() string {
+	return filepath.Join(s.dir, s.agentName, "job_history.jsonl")
+}
+
+// SaveJobRun saves a job run to history
+func (s *Store) SaveJobRun(run JobRun) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Ensure agent directory exists
+	if err := os.MkdirAll(filepath.Join(s.dir, s.agentName), 0755); err != nil {
+		return fmt.Errorf("creating agent directory: %w", err)
+	}
+
+	path := s.jobHistoryPath()
+
+	// Marshal the run
+	data, err := json.Marshal(run)
+	if err != nil {
+		return fmt.Errorf("marshaling job run: %w", err)
+	}
+
+	// Append to history file
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("opening job history file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := f.Write(append(data, '\n')); err != nil {
+		return fmt.Errorf("writing job run: %w", err)
+	}
+
+	// Trim history if too large
+	if err := s.trimJobHistory(); err != nil {
+		return fmt.Errorf("trimming job history: %w", err)
+	}
+
+	return nil
+}
+
+// trimJobHistory removes old entries if history exceeds maxJobHistory
+func (s *Store) trimJobHistory() error {
+	path := s.jobHistoryPath()
+
+	// Read all runs
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	defer file.Close()
+
+	var runs []JobRun
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var run JobRun
+		if err := json.Unmarshal(scanner.Bytes(), &run); err != nil {
+			continue // Skip malformed lines
+		}
+		runs = append(runs, run)
+	}
+
+	if len(runs) <= maxJobHistory {
+		return nil
+	}
+
+	// Keep only the most recent maxJobHistory entries
+	runs = runs[len(runs)-maxJobHistory:]
+
+	// Rewrite the file
+	file.Close()
+	f, err := os.Create(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	for _, run := range runs {
+		data, err := json.Marshal(run)
+		if err != nil {
+			continue
+		}
+		if _, err := f.Write(append(data, '\n')); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// GetJobHistory returns job run history, most recent first
+func (s *Store) GetJobHistory() ([]JobRun, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	path := s.jobHistoryPath()
+	file, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return []JobRun{}, nil
+		}
+		return nil, err
+	}
+	defer file.Close()
+
+	var runs []JobRun
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		var run JobRun
+		if err := json.Unmarshal(scanner.Bytes(), &run); err != nil {
+			continue // Skip malformed lines
+		}
+		runs = append(runs, run)
+	}
+
+	return runs, nil
+}
+
+// GetLastRunForJob returns the last run for a specific job, or nil if never run
+func (s *Store) GetLastRunForJob(jobName string) (*JobRun, error) {
+	history, err := s.GetJobHistory()
+	if err != nil {
+		return nil, err
+	}
+
+	for i := len(history) - 1; i >= 0; i-- {
+		if history[i].JobName == jobName {
+			return &history[i], nil
+		}
+	}
+
+	return nil, nil
 }

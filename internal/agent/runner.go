@@ -10,15 +10,18 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nalanj/acoo/internal/config"
 	"github.com/nalanj/acoo/internal/log"
 	"github.com/nalanj/acoo/internal/scheduler"
+	"github.com/nalanj/acoo/internal/storage"
 )
 
 // Runner manages the execution of a single agent
 type Runner struct {
 	Agent *config.Agent
 	Logger *log.Logger
+	store      *storage.Store
 
 	schedule      map[string]*scheduler.Schedule      // job name -> schedule
 	running       map[string]bool                    // job name -> is running
@@ -30,20 +33,27 @@ type Runner struct {
 }
 
 // NewRunner creates a new agent runner
-func NewRunner(agent *config.Agent, logger *log.Logger) *Runner {
+func NewRunner(agent *config.Agent, logger *log.Logger) (*Runner, error) {
 	// Workspace at ~/.local/share/acoo/{agent}/workspace
 	home, _ := os.UserHomeDir()
 	shareDir := filepath.Join(home, ".local", "share", "acoo")
 	workspace := filepath.Join(shareDir, agent.Name, "workspace")
 
+	// Create store for job history
+	store, err := storage.NewStore(shareDir, agent.Name)
+	if err != nil {
+		return nil, fmt.Errorf("creating store: %w", err)
+	}
+
 	return &Runner{
 		Agent:          agent,
 		Logger:         logger,
+		store:         store,
 		schedule:      make(map[string]*scheduler.Schedule),
 		running:       make(map[string]bool),
 		jobCancelFuncs: make(map[string]context.CancelFunc),
 		workspace:     workspace,
-	}
+	}, nil
 }
 
 // Start begins the agent's job loops in goroutines
@@ -58,9 +68,24 @@ func (r *Runner) Start(ctx context.Context) {
 
 	r.Logger.Info("started", log.F("jobs", len(r.Agent.JobsMap)))
 
-	// Parse schedules for each job (schedule is on agent)
+	// Load job history to get last run times
+	jobHistory, err := r.store.GetJobHistory()
+	if err != nil {
+		r.Logger.Warn("failed_to_load_job_history", log.F("error", err))
+	}
+
+	// Build map of last run time per job
+	lastRuns := make(map[string]time.Time)
+	for _, run := range jobHistory {
+		if _, exists := lastRuns[run.JobName]; !exists || run.StartedAt.After(lastRuns[run.JobName]) {
+			lastRuns[run.JobName] = run.StartedAt
+		}
+	}
+
+	// Parse schedules for each job (schedule is on agent), using last run time
 	for jobName, schedule := range r.Agent.Jobs {
-		sched, err := scheduler.Parse(schedule)
+		lastRun := lastRuns[jobName]
+		sched, err := scheduler.ParseWithLastRun(schedule, lastRun)
 		if err != nil {
 			r.Logger.Warn("invalid_schedule", log.F("job", jobName), log.F("error", err))
 			continue
@@ -203,6 +228,7 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 
 // executeJob runs a single job execution in a subprocess for environment isolation
 func (r *Runner) executeJob(jobName string, job *config.Job) {
+	startTime := time.Now()
 	r.Logger.Info("job_starting", log.F("job", job.Name))
 
 	// Ensure workspace exists
@@ -254,6 +280,33 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 	cmd.Dir = r.workspace
 
 	output, err := cmd.CombinedOutput()
+
+	// Record job run
+	finishTime := time.Now()
+	exitCode := 0
+	success := true
+	if err != nil {
+		success = false
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+
+	// Save to history (truncate output to avoid huge files)
+	outputPreview := truncate(string(output), 500)
+	jobRun := storage.JobRun{
+		ID:         uuid.New().String(),
+		JobName:    jobName,
+		StartedAt:  startTime,
+		FinishedAt: finishTime,
+		Success:    success,
+		Output:     outputPreview,
+		ExitCode:   exitCode,
+	}
+	if err := r.store.SaveJobRun(jobRun); err != nil {
+		r.Logger.Warn("failed_to_save_job_run", log.F("job", jobName), log.F("error", err))
+	}
+
 	if err != nil {
 		r.Logger.Error("subprocess_failed", log.F("job", jobName), log.F("error", err))
 		r.Logger.Info("subprocess_output", log.F("job", jobName), log.F("output", string(output)))

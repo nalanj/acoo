@@ -173,7 +173,11 @@ func (m *AgentManager) startAgent(a *config.Agent) {
 	}
 
 	logger := log.Agent(a.Name)
-	runner := agent.NewRunner(a, logger)
+	runner, err := agent.NewRunner(a, logger)
+	if err != nil {
+		m.logger.Error("create_runner_failed", log.F("agent", a.Name), log.F("error", err))
+		return
+	}
 
 	m.mu.Lock()
 	m.runners[a.Name] = runner
