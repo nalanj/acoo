@@ -279,76 +279,7 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 	cmd.Env = env
 	cmd.Dir = r.workspace
 
-	// Use stdout pipe to stream output in real-time
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		r.Logger.Error("create_stdout_pipe_failed", log.F("job", job.Name), log.F("error", err))
-		return
-	}
-
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		r.Logger.Error("create_stderr_pipe_failed", log.F("job", job.Name), log.F("error", err))
-		return
-	}
-
-	if err := cmd.Start(); err != nil {
-		r.Logger.Error("start_subprocess_failed", log.F("job", job.Name), log.F("error", err))
-		return
-	}
-
-	// Stream output in real-time
-	var outputBuilder strings.Builder
-	streamDone := make(chan struct {})
-	go func() {
-		buf := make([]byte, 1024)
-		for {
-			select {
-			case <-streamDone:
-				return
-			default:
-				if stdout == nil {
-					return
-				}
-				n, err := stdout.Read(buf)
-				if n > 0 {
-					chunk := string(buf[:n])
-					fmt.Print(chunk) // Print directly to show streaming
-					outputBuilder.WriteString(chunk)
-				}
-				if err != nil {
-					return
-				}
-			}
-		}
-	}()
-	go func() {
-		buf := make([]byte, 1024)
-		for {
-			select {
-			case <-streamDone:
-				return
-			default:
-				if stderr == nil {
-					return
-				}
-				n, err := stderr.Read(buf)
-				if n > 0 {
-					chunk := string(buf[:n])
-					fmt.Fprint(os.Stderr, chunk) // Print errors to stderr
-					outputBuilder.WriteString(chunk)
-				}
-				if err != nil {
-					return
-				}
-			}
-		}
-	}()
-
-	err = cmd.Wait()
-	close(streamDone)
-
-	output := outputBuilder.String()
+	output, err := cmd.CombinedOutput()
 
 	// Record job run
 	finishTime := time.Now()
