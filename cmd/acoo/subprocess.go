@@ -56,16 +56,20 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 	}
 	_ = lm // Used for compaction later
 
+	// Build system prompt with tools
+	tools := agent.Tools()
+	fullSystemPrompt := agent.BuildSystemPrompt(systemPrompt, tools)
+
 	// Save system prompt only if different from current (and current is not empty)
 	existingPrompt, _ := store.GetSystemPrompt()
-	if existingPrompt != "" && existingPrompt != systemPrompt {
-		store.SaveSystemPrompt(systemPrompt)
+	if existingPrompt != "" && existingPrompt != fullSystemPrompt {
+		store.SaveSystemPrompt(fullSystemPrompt)
 	}
 
 	// Build agent options
 	agentOptions := []fantasy.AgentOption{
-		fantasy.WithSystemPrompt(systemPrompt),
-		fantasy.WithTools(agent.Tools()...),
+		fantasy.WithSystemPrompt(fullSystemPrompt),
+		fantasy.WithTools(tools...),
 	}
 
 	// Add thinking option if configured (for anthropic-compatible providers)
