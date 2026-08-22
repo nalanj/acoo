@@ -7,8 +7,8 @@ import (
 	"charm.land/fantasy"
 )
 
-// BuildSystemPrompt composes the full system prompt from agent body and available tools
-func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.AgentTool, workspacePath string) string {
+// BuildSystemPrompt composes the full system prompt from agent body, tools, and skills
+func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.AgentTool, skills []Skill, workspacePath string) string {
 	var parts []string
 
 	// Agent identity
@@ -37,6 +37,11 @@ func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.Agent
 			parts = append(parts, info.Name+" - "+info.Description)
 		}
 		parts = append(parts, "", "Prefer direct tools over bash when possible. For example, use glob to find files by name rather than 'find' or 'ls' commands.")
+	}
+
+	// Skills section
+	if len(skills) > 0 {
+		parts = append(parts, "", BuildSkillsSection(skills))
 	}
 
 	return strings.Join(parts, "\n")

@@ -286,7 +286,10 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 	tools := Tools()
 	home, _ := os.UserHomeDir()
 	shareDir := filepath.Join(home, ".local", "share", "acoo")
-	fullSystemPrompt := BuildSystemPrompt(systemPrompt, r.Agent.Name, tools, r.workspace)
+	configDir := filepath.Join(home, ".config", "acoo")
+	skillsDir := filepath.Join(configDir, "skills")
+	skills := Skills(skillsDir)
+	fullSystemPrompt := BuildSystemPrompt(systemPrompt, r.Agent.Name, tools, skills, r.workspace)
 	systemPromptPath := filepath.Join(shareDir, r.Agent.Name, "system_prompt")
 	if err := os.WriteFile(systemPromptPath, []byte(fullSystemPrompt), 0644); err != nil {
 		r.Logger.Error("write_system_prompt_failed", log.F("job", job.Name), log.F("error", err))
