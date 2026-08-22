@@ -145,7 +145,14 @@ func BuildSkillsSection(skills []Skill) string {
 	}
 
 	var lines []string
-	lines = append(lines, "", "<available_skills>")
+	lines = append(lines, "", "## SPECIALIST SKILLS", "")
+	lines = append(lines, "You have access to specialist skills that contain detailed knowledge and step-by-step instructions for specific task types. These skills are listed below in the <available_skills> section.", "")
+	lines = append(lines, "MANDATORY: When a task matches a skill's description, you MUST load the SKILL.md file at the listed location using your file-read tool and follow its instructions. Do not attempt to answer from general knowledge alone.", "")
+	lines = append(lines, "How to use a skill:")
+	lines = append(lines, "1. Read the SKILL.md file at the skill's location")
+	lines = append(lines, "2. Follow the instructions in that file exactly")
+	lines = append(lines, "3. Use the tools and patterns described in the skill", "")
+	lines = append(lines, "<available_skills>")
 
 	for _, skill := range skills {
 		lines = append(lines, "  <skill>")
@@ -156,7 +163,6 @@ func BuildSkillsSection(skills []Skill) string {
 	}
 
 	lines = append(lines, "</available_skills>")
-	lines = append(lines, "", "When a task matches a skill's description, use your file-read tool to load the SKILL.md at the listed location.")
 
 	return strings.Join(lines, "\n")
 }
