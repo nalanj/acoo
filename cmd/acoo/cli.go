@@ -87,6 +87,7 @@ Example:
 	agentCmd.Flags().String("system-prompt", "", "System prompt")
 	agentCmd.Flags().String("system-prompt-path", "", "Path to system prompt file")
 	agentCmd.Flags().String("task-prompt", "", "Task prompt")
+	agentCmd.Flags().String("task-prompt-path", "", "Path to task prompt file")
 	agentCmd.Flags().String("model", "", "Model")
 	agentCmd.Flags().String("provider", "", "Provider")
 	agentCmd.Flags().Int64("thinking-budget", 0, "Thinking budget in tokens (0 = disabled)")

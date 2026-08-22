@@ -39,7 +39,19 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 		systemPrompt, _ = cmd.Flags().GetString("system-prompt")
 	}
 
-	taskPrompt, _ := cmd.Flags().GetString("task-prompt")
+	// Read task prompt from file or flag
+	taskPromptPath, _ := cmd.Flags().GetString("task-prompt-path")
+	taskPrompt := ""
+	if taskPromptPath != "" {
+		data, err := os.ReadFile(taskPromptPath)
+		if err != nil {
+			log.System().Error("read_task_prompt_failed", log.F("path", taskPromptPath), log.F("error", err))
+			return fmt.Errorf("reading task prompt from %s: %w", taskPromptPath, err)
+		}
+		taskPrompt = string(data)
+	} else {
+		taskPrompt, _ = cmd.Flags().GetString("task-prompt")
+	}
 	model, _ := cmd.Flags().GetString("model")
 	providerName, _ := cmd.Flags().GetString("provider")
 	thinkingBudget, _ := cmd.Flags().GetInt64("thinking-budget")

@@ -293,10 +293,17 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 		return
 	}
 
+	// Write task prompt to file
+	taskPromptPath := filepath.Join(shareDir, r.Agent.Name, "task_prompt")
+	if err := os.WriteFile(taskPromptPath, []byte(taskPrompt), 0644); err != nil {
+		r.Logger.Error("write_task_prompt_failed", log.F("job", job.Name), log.F("error", err))
+		return
+	}
+
 	// Build command with thinking budget if set
 	cmdArgs := []string{"agent",
 		"--system-prompt-path", systemPromptPath,
-		"--task-prompt", taskPrompt,
+		"--task-prompt-path", taskPromptPath,
 		"--model", job.Model,
 		"--provider", job.Provider,
 		"--agent-name", r.Agent.Name,
