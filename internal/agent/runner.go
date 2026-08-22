@@ -134,11 +134,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 	r.Logger.Info("job_loaded", log.F("job", jobName), log.F("schedule", sched.Spec))
 
 	// Initialize schedule - calculates first run time (immediately if never run)
-	firstRun := sched.NextRun()
-	if firstRun.After(time.Now()) {
-		nextRunStr := firstRun.Format(time.RFC3339)
-		r.Logger.Info("next_run", log.F("job", jobName), log.F("at", nextRunStr))
-	}
+	sched.NextRun()
 
 	// Run immediately for @once
 	if sched.IsOneShot() {
