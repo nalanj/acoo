@@ -1,13 +1,14 @@
 package agent
 
 import (
+	"fmt"
 	"strings"
 
 	"charm.land/fantasy"
 )
 
 // BuildSystemPrompt composes the full system prompt from agent body and available tools
-func BuildSystemPrompt(agentBody string, tools []fantasy.AgentTool) string {
+func BuildSystemPrompt(agentBody string, tools []fantasy.AgentTool, workspacePath string) string {
 	var parts []string
 
 	// Agent body
@@ -15,6 +16,11 @@ func BuildSystemPrompt(agentBody string, tools []fantasy.AgentTool) string {
 		parts = append(parts, strings.TrimSpace(agentBody))
 	} else {
 		parts = append(parts, "You are a helpful AI assistant.")
+	}
+
+	// Workspace guidance
+	if workspacePath != "" {
+		parts = append(parts, "", fmt.Sprintf("You have a special workspace folder, located at %s, where you're able to add new files. Avoid writing to files anywhere else unless specifically asked to do so. It's your job to keep your workspace folder tidy, so feel free to take a moment at any time to do so.", workspacePath))
 	}
 
 	// Tools section
