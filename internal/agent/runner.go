@@ -183,6 +183,17 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 
 		// Check preconditions
 		if !r.checkPreconditions(job) {
+			// Record precondition failure in job history so we don't loop infinitely
+			jobRun := storage.JobRun{
+				ID:         uuid.New().String(),
+				JobName:    jobName,
+				StartedAt:  time.Now(),
+				FinishedAt: time.Now(),
+				Success:    false,
+				ExitCode:   -1,
+			}
+			r.store.SaveJobRun(jobRun)
+
 			r.mu.Lock()
 			r.running[jobName] = false
 			r.mu.Unlock()
