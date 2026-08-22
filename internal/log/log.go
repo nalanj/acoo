@@ -1,18 +1,22 @@
 // Package log provides a standardized logger for acoo.
 //
-// Format: <ISO8601> <scope> <message> key=value key=value
+// Format: <ISO8601> <scope> <level> <message> key=value
 //
 // Where scope is:
 //   - "system" for system-level logs (manager, watcher, etc.)
 //   - "@<agent-name>" for agent-specific logs
 //
-// All output is written to stdout/stderr with an ISO8601 timestamp prefix.
-// Fields after the message are key=value pairs, separated by spaces.
+// Color output (when writing to a terminal):
+//   - timestamp: dimmed
+//   - system scope: cyan
+//   - @agent scope: green
+//   - warn level: yellow
+//   - error level: red
 //
 // Example output:
-//   2026-08-21T22:00:00 system started agents count=3
-//   2026-08-21T22:00:01 @code-reviewer job=calc starting
-//   2026-08-21T22:00:02 @code-reviewer job=calc next_run_in=29s
+//   2026-08-21T22:00:00 system info started agents=3
+//   2026-08-21T22:00:01 @code-reviewer info job=calc starting
+//   2026-08-21T22:00:02 @code-reviewer warn job=calc precondition_failed
 package log
 
 import (
@@ -23,6 +27,30 @@ import (
 	"sync"
 	"time"
 )
+
+// ANSI color codes
+const (
+	ColorReset  = "\033[0m"
+	ColorDim    = "\033[2m"
+	ColorRed     = "\033[31m"
+	ColorGreen   = "\033[32m"
+	ColorYellow  = "\033[33m"
+	ColorCyan    = "\033[36m"
+	ColorBoldRed = "\033[1;31m"
+)
+
+// isTerminal returns true if the writer is a terminal
+func isTerminal(w io.Writer) bool {
+	if f, ok := w.(*os.File); ok {
+		return isTerminalFd(f)
+	}
+	return false
+}
+
+var isTerminalFd = func(f *os.File) bool {
+	// Simple check - if it's stdout or stderr and has a terminal
+	return f == os.Stdout || f == os.Stderr
+}
 
 // Logger writes structured log lines with a consistent format.
 type Logger struct {
@@ -67,18 +95,44 @@ func (l *Logger) Error(message string, fields ...Field) {
 	l.write("error", message, fields...)
 }
 
+// colorForScope returns the color code for a scope
+func colorForScope(scope string) string {
+	if strings.HasPrefix(scope, "@") {
+		return ColorGreen
+	}
+	return ColorCyan
+}
+
+// colorForLevel returns the color code for a level
+func colorForLevel(level string) string {
+	switch level {
+	case "warn":
+		return ColorYellow
+	case "error":
+		return ColorBoldRed
+	default:
+		return ""
+	}
+}
+
 // write formats and writes a log line.
 func (l *Logger) write(level, message string, fields ...Field) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	timestamp := time.Now().Format(time.RFC3339)
+	scopeColor := colorForScope(l.scope)
+	levelColor := colorForLevel(level)
+
+	// Build parts
 	parts := []string{
-		time.Now().Format(time.RFC3339),
-		l.scope,
-		level,
+		l.colorize(timestamp, ColorDim),
+		l.colorize(l.scope, scopeColor),
+		l.colorize(level, levelColor),
 		message,
 	}
 
+	// Add fields
 	for _, f := range fields {
 		parts = append(parts, f.String())
 	}
@@ -88,7 +142,34 @@ func (l *Logger) write(level, message string, fields ...Field) {
 		out = os.Stderr
 	}
 
-	fmt.Fprintln(out, strings.Join(parts, " "))
+	// Only colorize if writing to terminal
+	if !isTerminal(out) {
+		// Strip colors for non-terminal output
+		fmt.Fprintln(out, stripColors(strings.Join(parts, " ")))
+		return
+	}
+
+	fmt.Fprintln(out, strings.Join(parts, " ")+ColorReset)
+}
+
+// colorize wraps text with color codes if color is not empty
+func (l *Logger) colorize(text, color string) string {
+	if color == "" {
+		return text
+	}
+	return color + text + ColorReset
+}
+
+// stripColors removes ANSI color codes from a string
+func stripColors(s string) string {
+	s = strings.ReplaceAll(s, ColorReset, "")
+	s = strings.ReplaceAll(s, ColorDim, "")
+	s = strings.ReplaceAll(s, ColorRed, "")
+	s = strings.ReplaceAll(s, ColorGreen, "")
+	s = strings.ReplaceAll(s, ColorYellow, "")
+	s = strings.ReplaceAll(s, ColorCyan, "")
+	s = strings.ReplaceAll(s, ColorBoldRed, "")
+	return s
 }
 
 // Field represents a key=value log field.
