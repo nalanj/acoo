@@ -13,10 +13,12 @@ import (
 type Skill struct {
 	Name        string
 	Description string
+	Location    string // Absolute path to the SKILL.md file
 	Content     string // Full skill content (markdown)
 }
 
 // Skills returns all available skills from the skills directory
+// It scans for subdirectories containing SKILL.md files
 func Skills(skillsDir string) []Skill {
 	var skills []Skill
 
@@ -29,14 +31,18 @@ func Skills(skillsDir string) []Skill {
 	}
 
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+		if !entry.IsDir() {
 			continue
 		}
 
-		path := filepath.Join(skillsDir, entry.Name())
-		skill, err := loadSkill(path)
+		skillPath := filepath.Join(skillsDir, entry.Name(), "SKILL.md")
+		if _, err := os.Stat(skillPath); os.IsNotExist(err) {
+			continue
+		}
+
+		skill, err := loadSkill(skillPath)
 		if err != nil {
-			log.System().Warn("load_skill_failed", log.F("path", path), log.F("error", err))
+			log.System().Warn("load_skill_failed", log.F("path", skillPath), log.F("error", err))
 			continue
 		}
 
@@ -70,6 +76,7 @@ func loadSkill(path string) (Skill, error) {
 	return Skill{
 		Name:        name,
 		Description: description,
+		Location:    path,
 		Content:     body,
 	}, nil
 }
@@ -139,9 +146,11 @@ func BuildSkillsSection(skills []Skill) string {
 
 	var lines []string
 	lines = append(lines, "", "Skills you have access to:")
+	lines = append(lines, "When a task matches a skill's description, use your file-read tool to load the SKILL.md at the listed location.")
+	lines = append(lines, "")
 
 	for _, skill := range skills {
-		lines = append(lines, fmt.Sprintf("- %s - %s", skill.Name, skill.Description))
+		lines = append(lines, fmt.Sprintf("- %s - %s (%s)", skill.Name, skill.Description, skill.Location))
 	}
 
 	return strings.Join(lines, "\n")
