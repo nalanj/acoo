@@ -292,6 +292,7 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 		"--model", job.Model,
 		"--provider", job.Provider,
 		"--agent-name", r.Agent.Name,
+		"--job-name", jobName,
 	}
 	if thinkingBudget := job.GetThinkingBudget(); thinkingBudget > 0 {
 		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
