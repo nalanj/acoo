@@ -137,10 +137,7 @@ func (l *Logger) write(level, message string, fields ...Field) {
 		parts = append(parts, f.String())
 	}
 
-	out := l.out
-	if level == "error" {
-		out = os.Stderr
-	}
+	out := os.Stderr // All logs go to stderr to avoid contaminating stdout
 
 	// Only colorize if writing to terminal
 	if !isTerminal(out) {
