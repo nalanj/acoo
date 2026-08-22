@@ -48,7 +48,7 @@ func (r *Runner) Start(ctx context.Context) {
 	r.started = true
 	r.mu.Unlock()
 
-	r.Logger.Info("started", log.F("agent", r.Agent.Name), log.F("jobs", len(r.Agent.JobsMap)))
+	r.Logger.Info("started", log.F("jobs", len(r.Agent.JobsMap)))
 
 	// Parse schedules for each job (schedule is on agent)
 	for jobName, schedule := range r.Agent.Jobs {
