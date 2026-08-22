@@ -1,7 +1,6 @@
 package config
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"testing"
@@ -34,14 +33,12 @@ func TestWatcherDebounce(t *testing.T) {
 		changes = append(changes, c...)
 	})
 
-	logger := log.New(os.Stdout, "", 0)
-
 	// Simulate multiple rapid events
 	testFile := filepath.Join(agentsDir, "test.md")
 	go func() {
-		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Create, Name: testFile}, logger)
-		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Write, Name: testFile}, logger)
-		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Chmod, Name: testFile}, logger)
+		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Create, Name: testFile})
+		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Write, Name: testFile})
+		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Chmod, Name: testFile})
 	}()
 
 	// Wait for debounce
@@ -77,11 +74,9 @@ func TestWatcherNewFile(t *testing.T) {
 		changes = append(changes, c...)
 	})
 
-	logger := log.New(os.Stdout, "", 0)
-
 	newFile := filepath.Join(agentsDir, "newagent.md")
 	go func() {
-		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Create, Name: newFile}, logger)
+		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Create, Name: newFile})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -118,12 +113,10 @@ func TestWatcherRemoveFile(t *testing.T) {
 		changes = append(changes, c...)
 	})
 
-	logger := log.New(os.Stdout, "", 0)
-
 	// First add the file and wait for it to be processed
 	testFile := filepath.Join(agentsDir, "test.md")
 	go func() {
-		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Create, Name: testFile}, logger)
+		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Create, Name: testFile})
 	}()
 	time.Sleep(200 * time.Millisecond) // Wait for debounce
 
@@ -132,7 +125,7 @@ func TestWatcherRemoveFile(t *testing.T) {
 
 	// Then remove it
 	go func() {
-		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Remove, Name: testFile}, logger)
+		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Remove, Name: testFile})
 	}()
 
 	time.Sleep(200 * time.Millisecond)
@@ -166,11 +159,9 @@ func TestWatcherNonMarkdownFile(t *testing.T) {
 		changes = append(changes, c...)
 	})
 
-	logger := log.New(os.Stdout, "", 0)
-
 	// Try to add non-markdown file
 	go func() {
-		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Create, Name: filepath.Join(agentsDir, "test.txt")}, logger)
+		watcher.handleEvent(fsnotify.Event{Op: fsnotify.Create, Name: filepath.Join(agentsDir, "test.txt")})
 	}()
 
 	time.Sleep(200 * time.Millisecond)

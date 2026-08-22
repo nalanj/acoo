@@ -3,14 +3,13 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
 	"github.com/nalanj/acoo/internal/agent"
 	"github.com/nalanj/acoo/internal/config"
+	"github.com/nalanj/acoo/internal/log"
 )
 
 // AgentManager manages all agent runners
@@ -21,9 +20,9 @@ type AgentManager struct {
 	watcher   *config.Watcher
 	runners   map[string]*agent.Runner
 
-	mu      sync.Mutex
-	ctx     context.Context
-	cancel  context.CancelFunc
+	mu     sync.Mutex
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewAgentManager creates a new agent manager
@@ -56,7 +55,7 @@ func (m *AgentManager) Start(ctx context.Context) error {
 		m.handleChanges(changed)
 	})
 
-	watcher.Watch(m.logger)
+	watcher.Watch()
 
 	return nil
 }
@@ -107,12 +106,13 @@ func (m *AgentManager) reloadAll() error {
 		m.startAgent(a)
 	}
 
+	m.logger.Info("loaded", log.F("agents", len(agents)))
 	return nil
 }
 
 // reloadAgentAsync reloads an agent asynchronously
 func (m *AgentManager) reloadAgentAsync(name string) {
-	m.logger.Printf("Reloading agent: %s", name)
+	m.logger.Info("reloading_agent", log.F("agent", name))
 
 	// Stop existing runner
 	m.stopAgent(name)
@@ -121,13 +121,13 @@ func (m *AgentManager) reloadAgentAsync(name string) {
 	path := filepath.Join(m.agentsDir, name+".md")
 	agentConfig, err := config.LoadAgentFile(path)
 	if err != nil {
-		m.logger.Printf("Failed to reload agent %s: %v", name, err)
+		m.logger.Error("reload_failed", log.F("agent", name), log.F("error", err))
 		return
 	}
 
 	jobs, err := config.LoadJobs(m.jobsDir)
 	if err != nil {
-		m.logger.Printf("Failed to load jobs: %v", err)
+		m.logger.Error("load_jobs_failed", log.F("error", err))
 		return
 	}
 
@@ -145,7 +145,7 @@ func (m *AgentManager) reloadAgentAsync(name string) {
 func (m *AgentManager) reloadAgentsWithJobAsync(jobName string) {
 	agents, err := config.LoadAgents(m.agentsDir)
 	if err != nil {
-		m.logger.Printf("Failed to load agents: %v", err)
+		m.logger.Error("load_agents_failed", log.F("error", err))
 		return
 	}
 
@@ -159,35 +159,46 @@ func (m *AgentManager) reloadAgentsWithJobAsync(jobName string) {
 // startAgent starts an agent runner
 func (m *AgentManager) startAgent(a *config.Agent) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	// Wait for existing runner to finish if needed
-	if existing, exists := m.runners[a.Name]; exists {
-		m.mu.Unlock()
+	var existing *agent.Runner
+	if e, ok := m.runners[a.Name]; ok {
+		existing = e
+	}
+	m.mu.Unlock()
+
+	if existing != nil {
 		existing.Stop()
 		existing.Wait()
-		m.mu.Lock()
 	}
 
-	logger := log.New(os.Stdout, fmt.Sprintf("[%s] ", a.Name), 0)
+	logger := log.Agent(a.Name)
 	runner := agent.NewRunner(a, logger)
 
+	m.mu.Lock()
 	m.runners[a.Name] = runner
+	m.mu.Unlock()
+
 	runner.Start(m.ctx)
 }
 
 // stopAgent stops an agent runner
 func (m *AgentManager) stopAgent(name string) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
 	runner, exists := m.runners[name]
+	if exists {
+		delete(m.runners, name)
+	}
+	m.mu.Unlock()
+
 	if !exists {
 		return
 	}
 
+	m.logger.Info("stopping_agent", log.F("agent", name))
 	runner.Stop()
-	delete(m.runners, name)
+	runner.Wait()
+	m.logger.Info("stopped_agent", log.F("agent", name))
 }
 
 // Stop stops the agent manager

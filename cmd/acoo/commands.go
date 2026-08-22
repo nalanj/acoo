@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/nalanj/acoo/internal/agent"
 	"github.com/nalanj/acoo/internal/config"
+	"github.com/nalanj/acoo/internal/log"
 	"github.com/nalanj/acoo/internal/provider"
 )
 
@@ -37,14 +37,14 @@ func runAllAgents() error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-	logger := log.New(os.Stdout, "", log.LstdFlags)
+	logger := log.System()
 	manager := NewAgentManager(agentsDir, jobsDir, logger)
 
 	if err := manager.Start(ctx); err != nil {
 		return fmt.Errorf("starting agent manager: %w", err)
 	}
 
-	logger.Printf("Started with %d agents", manager.AgentCount())
+	logger.Info("started", log.F("agents", manager.AgentCount()))
 
 	go func() {
 		<-sigChan
@@ -76,7 +76,7 @@ func runAgentOnce(name string) error {
 		return fmt.Errorf("agent not found: %s", name)
 	}
 
-	logger := log.New(os.Stdout, fmt.Sprintf("[%s] ", target.Name), 0)
+	logger := log.Agent(target.Name)
 	runner := agent.NewRunner(target, logger)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

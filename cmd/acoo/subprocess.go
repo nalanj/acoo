@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +15,7 @@ import (
 	"charm.land/fantasy/providers/anthropic"
 
 	"github.com/nalanj/acoo/internal/agent"
+	"github.com/nalanj/acoo/internal/log"
 	"github.com/nalanj/acoo/internal/provider"
 	"github.com/nalanj/acoo/internal/storage"
 )
@@ -110,7 +110,8 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 			var provErr *fantasy.ProviderError
 			if errors.As(err, &provErr) && provErr.IsContextTooLarge() {
 				if compactionRetries < maxCompactionRetries {
-					log.Printf("[compaction] Context too large, compacting session")
+					slog := log.System()
+					slog.Info("compaction_start", log.F("reason", "context_too_large"))
 
 					// Get message count for summary
 					meta, _ := store.GetMetadata()
@@ -123,7 +124,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 					summary := generateSummary(ctx, lm, systemPrompt, msgCount)
 					_, err := store.CompactStart(summary)
 					if err != nil {
-						log.Printf("[compaction] Failed: %v", err)
+						slog.Error("compaction_failed", log.F("error", err))
 						return fmt.Errorf("context overflow after compaction: %w", err)
 					}
 
@@ -250,7 +251,7 @@ func generateSummary(ctx context.Context, lm fantasy.LanguageModel, systemPrompt
 		},
 	})
 	if err != nil {
-		log.Printf("[compaction] Failed to generate summary: %v", err)
+		log.System().Error("summary_failed", log.F("error", err))
 		return "Conversation summary unavailable"
 	}
 

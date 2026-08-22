@@ -3,13 +3,13 @@ package agent
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"sync"
 	"time"
 
 	"github.com/nalanj/acoo/internal/config"
+	"github.com/nalanj/acoo/internal/log"
 	"github.com/nalanj/acoo/internal/scheduler"
 )
 
@@ -47,13 +47,13 @@ func (r *Runner) Start(ctx context.Context) {
 	r.started = true
 	r.mu.Unlock()
 
-	r.Logger.Printf("Agent started with %d jobs", len(r.Agent.JobsMap))
+	r.Logger.Info("started", log.F("agent", r.Agent.Name), log.F("jobs", len(r.Agent.JobsMap)))
 
 	// Parse schedules for each job (schedule is on agent)
 	for jobName, schedule := range r.Agent.Jobs {
 		sched, err := scheduler.Parse(schedule)
 		if err != nil {
-			r.Logger.Printf("Invalid schedule for %s: %v", jobName, err)
+			r.Logger.Warn("invalid_schedule", log.F("job", jobName), log.F("error", err))
 			continue
 		}
 		r.schedule[jobName] = sched
@@ -97,7 +97,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 	sched := r.schedule[jobName]
 	job := r.Agent.JobsMap[jobName]
 
-	r.Logger.Printf("[%s] Job started, schedule: %s", jobName, sched.Spec)
+	r.Logger.Info("job_started", log.F("job", jobName), log.F("schedule", sched.Spec))
 
 	// Run immediately for @once
 	if sched.IsOneShot() {
@@ -108,13 +108,13 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 	for {
 		wait := sched.SleepUntil()
 		if wait > 0 {
-			r.Logger.Printf("[%s] Next run in %s", jobName, scheduler.FormatInterval(wait))
+			r.Logger.Info("next_run", log.F("job", jobName), log.F("in", scheduler.FormatInterval(wait)))
 
 			// Sleep in small chunks to respond to cancellation faster
 			for wait > 0 {
 				select {
 				case <-ctx.Done():
-					r.Logger.Printf("[%s] Job stopped", jobName)
+					r.Logger.Info("job_stopped", log.F("job", jobName))
 					return
 				default:
 				}
@@ -130,7 +130,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 		// Check context before starting job
 		select {
 		case <-ctx.Done():
-			r.Logger.Printf("[%s] Job stopped", jobName)
+			r.Logger.Info("job_stopped", log.F("job", jobName))
 			return
 		default:
 		}
@@ -138,7 +138,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 		// Check if already running, skip if so
 		r.mu.Lock()
 		if r.running[jobName] {
-			r.Logger.Printf("[%s] Skipped (already running)", jobName)
+			r.Logger.Info("job_skipped", log.F("job", jobName), log.F("reason", "already_running"))
 			r.mu.Unlock()
 			sched.NextRun()
 			continue
@@ -172,11 +172,11 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 	}
 
 	for _, cmd := range job.Preconditions {
-		r.Logger.Printf("[%s] Running precondition: %s", job.Name, cmd)
+		r.Logger.Info("running_precondition", log.F("job", job.Name), log.F("command", cmd))
 		output, err := exec.Command("sh", "-c", cmd).CombinedOutput()
 		if err != nil {
-			r.Logger.Printf("[%s] Precondition failed (skipping job): %s", job.Name, cmd)
-			r.Logger.Printf("[%s] Precondition output: %s", job.Name, string(output))
+			r.Logger.Warn("precondition_failed", log.F("job", job.Name), log.F("command", cmd))
+			r.Logger.Info("precondition_output", log.F("job", job.Name), log.F("output", string(output)))
 			return false
 		}
 	}
@@ -185,7 +185,7 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 
 // executeJob runs a single job execution in a subprocess for environment isolation
 func (r *Runner) executeJob(jobName string, job *config.Job) {
-	r.Logger.Printf("[%s] Starting job", job.Name)
+	r.Logger.Info("job_starting", log.F("job", job.Name))
 
 	// Build system prompt from agent body
 	systemPrompt := r.Agent.Body
@@ -199,7 +199,7 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 	// Find the acoo binary path
 	execPath, err := os.Executable()
 	if err != nil {
-		r.Logger.Printf("[%s] Failed to find executable: %v", job.Name, err)
+		r.Logger.Error("find_executable_failed", log.F("job", job.Name), log.F("error", err))
 		return
 	}
 
@@ -224,23 +224,18 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
 	}
 
-	// Add compaction config (compaction is always enabled, only retain_tokens is configurable)
-	if job.Compaction.GetRetainTokens() != 20000 {
-		cmdArgs = append(cmdArgs, "--compaction-retain-tokens", fmt.Sprintf("%d", job.Compaction.GetRetainTokens()))
-	}
-
 	// Run in subprocess for environment isolation
 	cmd := exec.Command(execPath, cmdArgs...)
 	cmd.Env = env
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		r.Logger.Printf("[%s] Subprocess error: %v", jobName, err)
-		r.Logger.Printf("[%s] Output: %s", jobName, string(output))
+		r.Logger.Error("subprocess_failed", log.F("job", jobName), log.F("error", err))
+		r.Logger.Info("subprocess_output", log.F("job", jobName), log.F("output", string(output)))
 		return
 	}
 
-	r.Logger.Printf("[%s] Result: %s", jobName, truncate(string(output), 200))
+	r.Logger.Info("job_complete", log.F("job", jobName), log.F("result", truncate(string(output), 200)))
 }
 
 // truncate truncates a string to maxLen, adding ellipsis if truncated

@@ -1,13 +1,14 @@
 package config
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
+
+	"github.com/nalanj/acoo/internal/log"
 )
 
 // Watcher monitors directories for changes and notifies on add/remove
@@ -17,10 +18,8 @@ type Watcher struct {
 	watcher   *fsnotify.Watcher
 	handlers  []func(changed []string)
 
-	mu       sync.Mutex
-	knownFiles map[string]bool
-
-	// Debouncing
+	mu          sync.Mutex
+	knownFiles  map[string]bool
 	pending     map[string][]string // file -> actions
 	debounceTimer *time.Timer
 }
@@ -28,8 +27,8 @@ type Watcher struct {
 // NewWatcher creates a new directory watcher
 func NewWatcher(agentsDir, jobsDir string) (*Watcher, error) {
 	w := &Watcher{
-		agentsDir: agentsDir,
-		jobsDir:   jobsDir,
+		agentsDir:  agentsDir,
+		jobsDir:    jobsDir,
 		knownFiles: make(map[string]bool),
 		pending:    make(map[string][]string),
 	}
@@ -75,30 +74,31 @@ func (w *Watcher) OnChange(handler func(changed []string)) {
 }
 
 // Watch starts watching for changes in a goroutine
-func (w *Watcher) Watch(logger *log.Logger) {
-	go w.run(logger)
+func (w *Watcher) Watch() {
+	go w.run()
 }
 
 // run processes fsnotify events
-func (w *Watcher) run(logger *log.Logger) {
+func (w *Watcher) run() {
+	logger := log.System()
 	for {
 		select {
 		case event, ok := <-w.watcher.Events:
 			if !ok {
 				return
 			}
-			w.handleEvent(event, logger)
+			w.handleEvent(event)
 		case err, ok := <-w.watcher.Errors:
 			if !ok {
 				return
 			}
-			logger.Printf("Watcher error: %v", err)
+			logger.Error("watcher_error", log.F("error", err))
 		}
 	}
 }
 
 // handleEvent processes a single fsnotify event with debouncing
-func (w *Watcher) handleEvent(event fsnotify.Event, logger *log.Logger) {
+func (w *Watcher) handleEvent(event fsnotify.Event) {
 	// Only care about create and remove events on .md files
 	if !isMarkdownFile(event.Name) {
 		return
