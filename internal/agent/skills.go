@@ -145,13 +145,18 @@ func BuildSkillsSection(skills []Skill) string {
 	}
 
 	var lines []string
-	lines = append(lines, "", "Skills you have access to:")
-	lines = append(lines, "When a task matches a skill's description, use your file-read tool to load the SKILL.md at the listed location.")
-	lines = append(lines, "")
+	lines = append(lines, "", "<available_skills>")
 
 	for _, skill := range skills {
-		lines = append(lines, fmt.Sprintf("- %s - %s (%s)", skill.Name, skill.Description, skill.Location))
+		lines = append(lines, "  <skill>")
+		lines = append(lines, fmt.Sprintf("    <name>%s</name>", skill.Name))
+		lines = append(lines, fmt.Sprintf("    <description>%s</description>", skill.Description))
+		lines = append(lines, fmt.Sprintf("    <location>%s</location>", skill.Location))
+		lines = append(lines, "  </skill>")
 	}
+
+	lines = append(lines, "</available_skills>")
+	lines = append(lines, "", "When a task matches a skill's description, use your file-read tool to load the SKILL.md at the listed location.")
 
 	return strings.Join(lines, "\n")
 }
