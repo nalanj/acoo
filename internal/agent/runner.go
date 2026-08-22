@@ -109,7 +109,8 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 	for {
 		wait := sched.SleepUntil()
 		if wait > 0 {
-			r.Logger.Info("next_run", log.F("job", jobName), log.F("in", scheduler.FormatInterval(wait)))
+			nextRun := time.Now().Add(wait).Format(time.RFC3339)
+			r.Logger.Info("next_run", log.F("job", jobName), log.F("at", nextRun))
 
 			// Sleep in small chunks to respond to cancellation faster
 			for wait > 0 {
