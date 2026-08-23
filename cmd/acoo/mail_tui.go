@@ -339,7 +339,7 @@ func (m *model) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "tab":
+	case "tab", "right":
 		// If in To field, autocomplete
 		if m.composeTo.Focused() {
 			input := m.composeTo.Value()
@@ -352,7 +352,7 @@ func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			// Tab moves to next field
+			// Tab or right arrow moves to next field
 			m.composeTo.Blur()
 			m.composeSubject.Focus()
 		} else if m.composeSubject.Focused() {
