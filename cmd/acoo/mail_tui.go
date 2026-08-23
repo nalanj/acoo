@@ -369,27 +369,58 @@ func (m *model) updateList() {
 	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#bb9af7")).Background(lipgloss.Color("#24283b"))
 	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(lipgloss.Color("#7dcfff")).Background(lipgloss.Color("#24283b"))
 	delegate.ShowDescription = true
+
+	// Set list title based on current view
+	listTitle := "INBOX"
+	if m.view == viewArchive {
+		listTitle = "ARCHIVE"
+	} else if m.view == viewThreads {
+		listTitle = "THREADS"
+	}
+
 	m.list = list.New(items, delegate, m.width, m.height-3)
+	m.list.Title = listTitle
 }
 
 func (m *model) loadMessage(id string) {
-	msg, err := m.store.Load(id)
+	// Load full thread for context
+	thread, err := m.store.GetThreadByMessageID(id)
 	if err != nil {
+		// Fallback to single message if thread load fails
+		msg, err := m.store.Load(id)
+		if err != nil {
+			return
+		}
+		m.selectedID = id
+		m.updateViewportForThread(&mail.Thread{
+			ID:           id,
+			Subject:      msg.Subject,
+			MessageCount: 1,
+			Messages:     []*mail.Message{msg},
+		})
 		return
 	}
 	m.selectedID = id
-	m.updateViewport(msg)
+	m.updateViewportForThread(thread)
 }
 
-func (m *model) updateViewport(msg *mail.Message) {
+func (m *model) updateViewportForThread(thread *mail.Thread) {
 	var b strings.Builder
-	b.WriteString(titleStyle.Render(msg.Subject))
-	b.WriteString("\n")
-	b.WriteString(fmt.Sprintf("From: %s | %s\n", msg.From, msg.Timestamp.Format("2006-01-02 15:04")))
+	b.WriteString(titleStyle.Render(thread.Subject))
+	b.WriteString(fmt.Sprintf(" (%d messages)\n", thread.MessageCount))
 	b.WriteString(statusOKStyle.Render(strings.Repeat("─", m.width-2)))
 	b.WriteString("\n\n")
-	b.WriteString(msg.Body)
-	b.WriteString("\n")
+
+	for i, msg := range thread.Messages {
+		if i > 0 {
+			b.WriteString("\n")
+			b.WriteString(helpStyle.Render(strings.Repeat("─", 40)))
+			b.WriteString("\n\n")
+		}
+		b.WriteString(fmt.Sprintf("%s %s | %s\n", statusOKStyle.Render("▎"), msg.From, msg.Timestamp.Format("2006-01-02 15:04")))
+		b.WriteString(msg.Body)
+	}
+
 	m.viewport.SetContent(b.String())
 }
 

@@ -263,6 +263,65 @@ func (s *Store) ListThreadsForRecipient(recipient string) ([]*Thread, error) {
 	return threads, nil
 }
 
+// GetThreadByMessageID returns the thread containing the given message ID
+func (s *Store) GetThreadByMessageID(msgID string) (*Thread, error) {
+	msg, err := s.Load(msgID)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the thread ID (use message ID if no thread)
+	threadID := msg.Thread
+	if threadID == "" {
+		threadID = msg.ID
+	}
+
+	// Load all messages and find ones in the same thread
+	all, err := s.ListMessages()
+	if err != nil {
+		return nil, err
+	}
+
+	var threadMsgs []*Message
+	for _, m := range all {
+		mThreadID := m.Thread
+		if mThreadID == "" {
+			mThreadID = m.ID
+		}
+		if mThreadID == threadID {
+			threadMsgs = append(threadMsgs, m)
+		}
+	}
+
+	if len(threadMsgs) == 0 {
+		return nil, fmt.Errorf("thread not found: %s", threadID)
+	}
+
+	// Sort by timestamp
+	sort.Slice(threadMsgs, func(i, j int) bool {
+		return threadMsgs[i].Timestamp.Before(threadMsgs[j].Timestamp)
+	})
+
+	// Build participant list
+	participants := make([]string, 0)
+	seen := make(map[string]bool)
+	for _, m := range threadMsgs {
+		if !seen[m.From] {
+			participants = append(participants, m.From)
+			seen[m.From] = true
+		}
+	}
+
+	return &Thread{
+		ID:           threadID,
+		Subject:      threadMsgs[0].Subject,
+		LastMessage:  threadMsgs[len(threadMsgs)-1].Timestamp,
+		MessageCount: len(threadMsgs),
+		Participants: participants,
+		Messages:     threadMsgs,
+	}, nil
+}
+
 func (s *Store) messagePath(id string) string {
 	return filepath.Join(s.messagesDir, id+".md")
 }
