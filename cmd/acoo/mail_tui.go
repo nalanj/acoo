@@ -231,7 +231,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "a":
+	case "r":
 		if m.view == viewMessage {
 			// Archive the current message
 			m.archiveMessage(m.selectedID)
@@ -298,7 +298,7 @@ func (m *model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.archiveMessage(item.id)
 			m.loadInbox()
 		}
-	case "r":
+	case "a":
 		if m.list.SelectedItem() != nil {
 			item := m.list.SelectedItem().(MailItem)
 			m.archiveMessage(item.id)
@@ -788,11 +788,11 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "i:inbox u:unread a:archive t:threads | j/k:up/down r:archive c:compose q:quit ?/help"
+		footer = "i:inbox u:unread r:archive t:threads | j/k:up/down a:archive c:compose q:quit ?/help"
 	case viewArchive:
-		footer = "i:inbox u:unread a:archive t:threads | j/k:up/down r:archive c:compose q:quit"
+		footer = "i:inbox u:unread r:archive t:threads | j/k:up/down a:archive c:compose q:quit"
 	case viewThreads:
-		footer = "i:inbox u:unread t:threads | j/k:up/down r:archive c:compose q:quit"
+		footer = "i:inbox u:unread t:threads | j/k:up/down a:archive c:compose q:quit"
 	case viewMessage:
 		footer = "a:archive | q:back"
 	case viewCompose:
