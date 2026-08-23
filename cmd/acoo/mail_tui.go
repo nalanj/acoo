@@ -110,10 +110,12 @@ func newModel() (*model, error) {
 
 	composeTo := textinput.New()
 	composeTo.Placeholder = "recipient"
+	composeTo.Prompt = ""
 	composeTo.Focus()
 
 	composeSubject := textinput.New()
 	composeSubject.Placeholder = "subject"
+	composeSubject.Prompt = ""
 
 	composeBody := textarea.New()
 	composeBody.Placeholder = "message body..."
