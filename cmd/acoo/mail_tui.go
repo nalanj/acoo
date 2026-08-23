@@ -657,22 +657,22 @@ func (m *model) renderMessage(b *strings.Builder) {
 }
 
 func (m *model) renderCompose(b *strings.Builder) {
-	b.WriteString(titleStyle.Render("New Message\n"))
-	b.WriteString(borderStyle.Render(strings.Repeat("─", m.width)))
+	b.WriteString(titleStyle.Render("  New Message"))
 	b.WriteString("\n")
 
 	// To field
-	b.WriteString(titleStyle.Render("To: "))
+	b.WriteString(titleStyle.Render("  To: "))
 	b.WriteString(m.composeTo.View())
 	b.WriteString("\n")
 
 	// Subject field
-	b.WriteString(titleStyle.Render("Subject: "))
+	b.WriteString(titleStyle.Render("  Subject: "))
 	b.WriteString(m.composeSubject.View())
 	b.WriteString("\n")
 
 	// Body field
-	b.WriteString(titleStyle.Render("Body:\n"))
+	b.WriteString(titleStyle.Render("  Body:"))
+	b.WriteString("\n")
 	b.WriteString(m.composeBody.View())
 	b.WriteString("\n")
 
