@@ -151,9 +151,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle compose mode keys before text inputs see them
 	if m.view == viewCompose {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			// Handle Tab, Enter, Ctrl+Enter, Esc, q BEFORE text inputs
-			if keyMsg.String() == "tab" || keyMsg.String() == "enter" ||
-				keyMsg.String() == "ctrl+enter" || keyMsg.String() == "ctrl+j" ||
+			// Handle Tab, Enter, Ctrl+Enter, Esc, q, arrow keys BEFORE text inputs
+			if keyMsg.String() == "tab" || keyMsg.String() == "shift+tab" ||
+				keyMsg.String() == "enter" || keyMsg.String() == "ctrl+enter" ||
+				keyMsg.String() == "ctrl+j" || keyMsg.String() == "right" ||
 				keyMsg.String() == "esc" || keyMsg.String() == "q" {
 				return m.handleComposeKey(keyMsg)
 			}
