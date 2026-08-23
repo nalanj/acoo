@@ -88,6 +88,7 @@ type model struct {
 	composeThread   string  // Thread ID for replies
 	composeParent   string  // Parent message ID for replies
 	composeAgents   []string  // Available agents for autocomplete
+	composeMatches  []string  // Filtered agent matches for autocomplete
 
 	quitting bool
 	width    int
@@ -314,10 +315,17 @@ func (m *model) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "tab":
-		// Cycle focus between fields
+		// If in To field, try autocomplete
 		if m.composeTo.Focused() {
-			m.composeTo.Blur()
-			m.composeSubject.Focus()
+			m.filterAgents()
+			if len(m.composeMatches) > 0 {
+				m.composeTo.SetValue(m.composeMatches[0])
+				m.composeMatches = nil
+				m.composeSubject.Focus()
+			} else {
+				m.composeTo.Blur()
+				m.composeSubject.Focus()
+			}
 		} else if m.composeSubject.Focused() {
 			m.composeSubject.Blur()
 			m.composeBody.Focus()
@@ -336,6 +344,21 @@ func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.composeTo.Focus()
 	}
 	return m, nil
+}
+
+// filterAgents filters agents matching the current To field value
+func (m *model) filterAgents() {
+	prefix := strings.ToLower(m.composeTo.Value())
+	m.composeMatches = nil
+	if prefix == "" {
+		m.composeMatches = m.composeAgents
+		return
+	}
+	for _, agent := range m.composeAgents {
+		if strings.HasPrefix(strings.ToLower(agent), prefix) {
+			m.composeMatches = append(m.composeMatches, agent)
+		}
+	}
 }
 
 func (m *model) loadInbox() {
@@ -669,10 +692,15 @@ func (m *model) renderCompose(b *strings.Builder) {
 	b.WriteString(m.composeTo.View())
 
 	// Show agent suggestions when To field is focused and empty
-	if m.composeTo.Focused() && m.composeTo.Value() == "" && len(m.composeAgents) > 0 {
+	// Show agent suggestions when To field is focused
+	if m.composeTo.Focused() && len(m.composeAgents) > 0 {
+		showAgents := m.composeMatches
+		if len(showAgents) == 0 {
+			showAgents = m.composeAgents
+		}
 		b.WriteString("\n")
-		b.WriteString(helpStyle.Render("  Suggestions: "))
-		for i, agent := range m.composeAgents {
+		b.WriteString(helpStyle.Render("  Tab to: "))
+		for i, agent := range showAgents {
 			if i > 0 {
 				b.WriteString(helpStyle.Render(", "))
 			}
