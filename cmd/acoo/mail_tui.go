@@ -151,11 +151,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Handle compose mode keys before text inputs see them
 	if m.view == viewCompose {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			// Handle Tab, Enter, Ctrl+Enter, Esc, q, arrow keys BEFORE text inputs
-			if keyMsg.String() == "tab" || keyMsg.String() == "shift+tab" ||
-				keyMsg.String() == "enter" || keyMsg.String() == "ctrl+enter" ||
-				keyMsg.String() == "ctrl+j" || keyMsg.String() == "right" ||
-				keyMsg.String() == "esc" || keyMsg.String() == "q" {
+			keyStr := keyMsg.String()
+			if keyStr == "tab" || keyStr == "enter" || keyStr == "ctrl+enter" ||
+				keyStr == "ctrl+j" || keyStr == "right" || keyStr == "esc" || keyStr == "q" {
 				return m.handleComposeKey(keyMsg)
 			}
 		}
@@ -362,18 +360,6 @@ func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.composeBody.Blur()
 			m.composeTo.Focus()
-		}
-	case "shift+tab":
-		// Backward: Body -> Subject -> To
-		if m.composeBody.Focused() {
-			m.composeBody.Blur()
-			m.composeSubject.Focus()
-		} else if m.composeSubject.Focused() {
-			m.composeSubject.Blur()
-			m.composeTo.Focus()
-		} else {
-			m.composeTo.Blur()
-			m.composeBody.Focus()
 		}
 	case "enter", "ctrl+enter", "ctrl+j":
 		// Send the message
