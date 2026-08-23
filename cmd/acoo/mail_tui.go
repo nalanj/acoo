@@ -55,6 +55,7 @@ const (
 	viewThreads  = "threads"
 	viewMessage  = "message"
 	viewCompose  = "compose"
+	viewUnread   = "unread"
 	viewHelp     = "help"
 )
 
@@ -223,7 +224,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "i":
+	case "i", "u":
 		if m.view != viewCompose {
 			m.view = viewInbox
 			m.loadInbox()
@@ -300,7 +301,15 @@ func (m *model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		if m.list.SelectedItem() != nil {
 			item := m.list.SelectedItem().(MailItem)
-			m.startReply(item.id)
+			m.archiveMessage(item.id)
+			// Reload current view
+			if m.view == viewArchive {
+				m.loadArchive()
+			} else if m.view == viewThreads {
+				m.loadThreads()
+			} else {
+				m.loadInbox()
+			}
 		}
 	}
 	return m, nil
@@ -779,13 +788,13 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "i:inbox a:archive t:threads | j/k:up/down d:archive r:reply c:compose q:quit ?/help"
+		footer = "i:inbox u:unread a:archive t:threads | j/k:up/down r:archive c:compose q:quit ?/help"
 	case viewArchive:
-		footer = "i:inbox a:archive t:threads | j/k:up/down d:archive c:compose q:quit"
+		footer = "i:inbox u:unread a:archive t:threads | j/k:up/down r:archive c:compose q:quit"
 	case viewThreads:
-		footer = "i:inbox t:threads | j/k:up/down c:compose q:quit"
+		footer = "i:inbox u:unread t:threads | j/k:up/down r:archive c:compose q:quit"
 	case viewMessage:
-		footer = "r:reply a:archive | q:back"
+		footer = "a:archive | q:back"
 	case viewCompose:
 		footer = "Tab:field Enter:newline Ctrl+J:send | q:cancel"
 	case viewHelp:
