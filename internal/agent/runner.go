@@ -222,7 +222,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 
 // checkPreconditions runs preconditions and returns true if all pass
 func (r *Runner) checkPreconditions(job *config.Job) bool {
-	if len(job.Preconditions) == 0 {
+	if job == nil || len(job.Preconditions) == 0 {
 		return true
 	}
 
