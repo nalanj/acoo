@@ -19,6 +19,11 @@ func Tools() []fantasy.AgentTool {
 		BashTool(),
 		GlobTool(),
 		ListDirTool(),
+		MailInboxTool(),
+		MailSendTool(),
+		MailReadTool(),
+		MailReplyTool(),
+		MailArchiveTool(),
 	}
 }
 
@@ -145,4 +150,118 @@ func ListDirTool() fantasy.AgentTool {
 	}
 
 	return fantasy.NewAgentTool("list_dir", "List contents of a directory", fn)
+}
+
+// MailInboxTool returns a tool for checking inbox
+func MailInboxTool() fantasy.AgentTool {
+	type MailInboxInput struct {
+		All bool `json:"all,omitempty" description:"Show all messages including archived"`
+	}
+
+	fn := func(ctx context.Context, input MailInboxInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		cmd := exec.Command("agent-mail", "inbox")
+		if input.All {
+			cmd.Args = append(cmd.Args, "--all")
+		}
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+		}
+		return fantasy.NewTextResponse(string(output)), nil
+	}
+
+	return fantasy.NewAgentTool("mail_inbox", "Check inbox for new messages", fn)
+}
+
+// MailSendTool returns a tool for sending messages
+func MailSendTool() fantasy.AgentTool {
+	type MailSendInput struct {
+		Recipient string `json:"recipient" description:"The recipient to send to"`
+		Subject   string `json:"subject" description:"The message subject"`
+		Body      string `json:"body" description:"The message body"`
+	}
+
+	fn := func(ctx context.Context, input MailSendInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		// Write body to temp file
+		tmpfile, err := os.CreateTemp("", "agent-mail-*.txt")
+		if err != nil {
+			return fantasy.NewTextErrorResponse("Error creating temp file: " + err.Error()), nil
+		}
+		defer os.Remove(tmpfile.Name())
+		tmpfile.WriteString(input.Body)
+		tmpfile.Close()
+
+		cmd := exec.Command("agent-mail", "send", input.Recipient, "-s", input.Subject, "-b", tmpfile.Name())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+		}
+		return fantasy.NewTextResponse(string(output)), nil
+	}
+
+	return fantasy.NewAgentTool("mail_send", "Send a message to a recipient", fn)
+}
+
+// MailReadTool returns a tool for reading messages
+func MailReadTool() fantasy.AgentTool {
+	type MailReadInput struct {
+		MessageID string `json:"message_id" description:"The message ID to read"`
+	}
+
+	fn := func(ctx context.Context, input MailReadInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		cmd := exec.Command("agent-mail", "read", input.MessageID)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+		}
+		return fantasy.NewTextResponse(string(output)), nil
+	}
+
+	return fantasy.NewAgentTool("mail_read", "Read a message by ID", fn)
+}
+
+// MailReplyTool returns a tool for replying to messages
+func MailReplyTool() fantasy.AgentTool {
+	type MailReplyInput struct {
+		MessageID string `json:"message_id" description:"The message ID to reply to"`
+		Body      string `json:"body" description:"The reply body"`
+	}
+
+	fn := func(ctx context.Context, input MailReplyInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		// Write body to temp file
+		tmpfile, err := os.CreateTemp("", "agent-mail-*.txt")
+		if err != nil {
+			return fantasy.NewTextErrorResponse("Error creating temp file: " + err.Error()), nil
+		}
+		defer os.Remove(tmpfile.Name())
+		tmpfile.WriteString(input.Body)
+		tmpfile.Close()
+
+		cmd := exec.Command("agent-mail", "reply", input.MessageID, "-b", tmpfile.Name())
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+		}
+		return fantasy.NewTextResponse(string(output)), nil
+	}
+
+	return fantasy.NewAgentTool("mail_reply", "Reply to a message", fn)
+}
+
+// MailArchiveTool returns a tool for archiving messages
+func MailArchiveTool() fantasy.AgentTool {
+	type MailArchiveInput struct {
+		MessageID string `json:"message_id" description:"The message ID to archive"`
+	}
+
+	fn := func(ctx context.Context, input MailArchiveInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
+		cmd := exec.Command("agent-mail", "archive", input.MessageID)
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+		}
+		return fantasy.NewTextResponse(string(output)), nil
+	}
+
+	return fantasy.NewAgentTool("mail_archive", "Archive a message", fn)
 }
