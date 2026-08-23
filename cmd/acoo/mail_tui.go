@@ -440,6 +440,7 @@ func (m *model) updateList() {
 
 	m.list = list.New(items, delegate, m.width, m.height-3)
 	m.list.Title = listTitle
+	m.list.SetFilteringEnabled(false)
 }
 
 func (m *model) loadMessage(id string) {
@@ -721,7 +722,7 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "i:inbox u:unread r:archive | j/k:up/down a:archive c:compose q:quit ?/help"
+		footer = "i:inbox u:unread r:archive | j/k:up/down a:archive c:compose q:quit ?:help"
 	case viewArchive:
 		footer = "i:inbox u:unread r:archive | j/k:up/down a:archive c:compose q:quit"
 	case viewMessage:
