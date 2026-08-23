@@ -678,9 +678,6 @@ func (m *model) renderCompose(b *strings.Builder) {
 
 	// To field with inline autocomplete
 	b.WriteString(titleStyle.Render("  To: "))
-	b.WriteString(m.composeTo.View())
-
-	// Show autocomplete suggestion when typing in To field
 	input := m.composeTo.Value()
 	if m.composeTo.Focused() && input != "" && len(m.composeAgents) > 0 {
 		prefix := strings.ToLower(input)
@@ -691,10 +688,16 @@ func (m *model) renderCompose(b *strings.Builder) {
 				break
 			}
 		}
-		if match != "" && len(match) > len(input) {
-			// Show the rest of the completion in dimmed style
-			b.WriteString(dimStyle.Render(match[len(input):]))
+		if match != "" {
+			b.WriteString(itemStyle.Render(input))
+			if len(match) > len(input) {
+				b.WriteString(dimStyle.Render(match[len(input):]))
+			}
+		} else {
+			b.WriteString(itemStyle.Render(input))
 		}
+	} else {
+		b.WriteString(m.composeTo.View())
 	}
 	b.WriteString("\n")
 
