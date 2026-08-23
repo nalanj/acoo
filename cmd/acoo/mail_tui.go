@@ -204,7 +204,12 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "a":
-		if m.view != viewCompose {
+		if m.view == viewMessage {
+			// Archive the current message
+			m.archiveMessage(m.selectedID)
+			m.view = viewInbox
+			m.loadInbox()
+		} else if m.view != viewCompose {
 			m.view = viewArchive
 			m.loadArchive()
 		}
@@ -299,10 +304,6 @@ func (m *model) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "r":
 		m.startReply(m.selectedID)
-	case "a":
-		m.archiveMessage(m.selectedID)
-		m.view = viewInbox
-		m.loadInbox()
 	case "q":
 		m.view = viewInbox
 	}
@@ -695,7 +696,7 @@ Navigation:
 List view:
   j/k/↑/↓   Navigate
   g/G       Go to top/bottom
-  Enter     Open message
+  v/Enter   View selected
   d         Archive selected
   r         Reply to selected
 
@@ -706,8 +707,8 @@ Message view:
 
 Compose:
   Tab       Next field
-  Ctrl+R    Edit body in $EDITOR
-  Ctrl+S    Send
+  Enter     Newline in body
+  Ctrl+J    Send
   q/Esc     Cancel
 `
 	b.WriteString(itemStyle.Render(helpText))
@@ -720,15 +721,15 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "q:quit i:inbox a:archive t:threads n:new ?/help"
+		footer = "q:quit i:inbox a:archive t:threads n:new v:view Enter ?/help"
 	case viewArchive:
-		footer = "q:quit i:inbox a:archive t:threads n:new ?/help"
+		footer = "q:quit i:inbox a:archive t:threads n:new v:view Enter ?/help"
 	case viewThreads:
-		footer = "q:quit i:inbox a:archive t:threads n:new ?/help"
+		footer = "q:quit i:inbox t:threads n:new v:view Enter"
 	case viewMessage:
 		footer = "q:back r:reply a:archive"
 	case viewCompose:
-		footer = "Tab:field Ctrl+R:edit Ctrl+S:send q:cancel"
+		footer = "Tab:field Enter:newline Ctrl+J:send q:cancel"
 	case viewHelp:
 		footer = "q:back"
 	}
