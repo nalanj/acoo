@@ -222,7 +222,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "n":
+	case "c":
 		if m.view != viewCompose {
 			m.startCompose("", "", "", "", "")
 		}
@@ -688,7 +688,7 @@ Views:
   i         Inbox
   a         Archive
   t         Threads
-  n         New message
+  c         Compose
   ?         Toggle this help
 
 List navigation:
@@ -721,11 +721,11 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "i:inbox a:archive t:threads | j/k:up/down d:archive r:reply n:new q:quit ?/help"
+		footer = "i:inbox a:archive t:threads | j/k:up/down d:archive r:reply c:compose q:quit ?/help"
 	case viewArchive:
-		footer = "i:inbox a:archive t:threads | j/k:up/down d:archive n:new q:quit"
+		footer = "i:inbox a:archive t:threads | j/k:up/down d:archive c:compose q:quit"
 	case viewThreads:
-		footer = "i:inbox t:threads | j/k:up/down n:new q:quit"
+		footer = "i:inbox t:threads | j/k:up/down c:compose q:quit"
 	case viewMessage:
 		footer = "r:reply a:archive | q:back"
 	case viewCompose:
