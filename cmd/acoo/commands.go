@@ -37,6 +37,8 @@ func runAllAgents() error {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	fmt.Println("[DEBUG] Signal handler registered")
+
 	logger := log.System()
 	manager := NewAgentManager(agentsDir, jobsDir, logger)
 
@@ -45,16 +47,22 @@ func runAllAgents() error {
 	}
 
 	logger.Info("started", log.F("agents", manager.AgentCount()))
+	fmt.Println("[DEBUG] Manager started, waiting for signal...")
 
-	go func() {
-		<-sigChan
-		fmt.Println("\nShutting down...")
-		cancel()
-	}()
-
-	<-ctx.Done()
-	manager.Stop()
-
+	// Handle signals
+	shutdown := false
+	for !shutdown {
+		select {
+		case sig := <-sigChan:
+			fmt.Printf("\n[DEBUG] Received signal: %v\n", sig)
+			fmt.Println("Shutting down...")
+			manager.Stop()
+			shutdown = true
+		case <-ctx.Done():
+			shutdown = true
+		}
+	}
+	fmt.Println("[DEBUG] Done")
 	return nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -323,6 +324,11 @@ func (r *Runner) executeJob(ctx context.Context, jobName string, job *config.Job
 	cmd.Dir = r.workspace
 	// Don't pipe stdout/stderr - agent output is too verbose for server logs
 
+	// Create new process group for the subprocess so signals don't interfere
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Setpgid: true,
+	}
+
 	r.Logger.Info("subprocess_started", log.F("job", job.Name), log.F("executable", execPath), log.F("dir", r.workspace))
 
 	// Start the process
@@ -341,7 +347,8 @@ func (r *Runner) executeJob(ctx context.Context, jobName string, job *config.Job
 	select {
 	case <-ctx.Done():
 		r.Logger.Info("job_cancelled", log.F("job", job.Name))
-		cmd.Process.Kill()
+		// Kill the process group (negative PID means kill the process group)
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		cmd.Wait()
 		return
 	case exitErr = <-done:
