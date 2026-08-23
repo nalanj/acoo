@@ -686,17 +686,19 @@ func (m *model) renderCompose(b *strings.Builder) {
 
 func (m *model) renderHelp(b *strings.Builder) {
 	helpText := `
-Navigation:
-  i         Go to inbox
-  a         Go to archive
-  t         Go to threads
+Views:
+  i         Inbox
+  a         Archive
+  t         Threads
   n         New message
   ?         Toggle this help
 
-List view:
+List navigation:
   j/k/↑/↓   Navigate
-  g/G       Go to top/bottom
-  v/Enter   View selected
+  g/G       Top/bottom
+
+List actions:
+  Enter     View message
   d         Archive selected
   r         Reply to selected
 
@@ -721,15 +723,15 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "q:quit i:inbox a:archive t:threads n:new v:view Enter ?/help"
+		footer = "i:inbox a:archive t:threads | j/k:up/down Enter:view d:archive r:reply n:new q:quit ?/help"
 	case viewArchive:
-		footer = "q:quit i:inbox a:archive t:threads n:new v:view Enter ?/help"
+		footer = "i:inbox a:archive t:threads | j/k:up/down Enter:view d:archive n:new q:quit"
 	case viewThreads:
-		footer = "q:quit i:inbox t:threads n:new v:view Enter"
+		footer = "i:inbox t:threads | j/k:up/down Enter:view n:new q:quit"
 	case viewMessage:
-		footer = "q:back r:reply a:archive"
+		footer = "r:reply a:archive | q:back"
 	case viewCompose:
-		footer = "Tab:field Enter:newline Ctrl+J:send q:cancel"
+		footer = "Tab:field Enter:newline Ctrl+J:send | q:cancel"
 	case viewHelp:
 		footer = "q:back"
 	}
