@@ -52,10 +52,8 @@ var (
 const (
 	viewInbox    = "inbox"
 	viewArchive  = "archive"
-	viewThreads  = "threads"
 	viewMessage  = "message"
 	viewCompose  = "compose"
-	viewUnread   = "unread"
 	viewHelp     = "help"
 )
 
@@ -83,7 +81,6 @@ type model struct {
 	list       list.Model
 	viewport   viewport.Model
 	messages   []*mail.Message
-	threads    []*mail.Thread
 	selectedID string
 	refreshTick int // Counter to trigger list refresh
 
@@ -187,8 +184,6 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadInbox()
 		case viewArchive:
 			m.loadArchive()
-		case viewThreads:
-			m.loadThreads()
 		}
 		// Continue ticking
 		return m, tea.Tick(refreshInterval, func(t time.Time) tea.Msg {
@@ -243,13 +238,6 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case "t":
-		if m.view != viewCompose {
-			m.view = viewThreads
-			m.loadThreads()
-		}
-		return m, nil
-
 	case "c":
 		if m.view != viewCompose {
 			m.startCompose("", "", "", "", "")
@@ -261,9 +249,6 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch m.view {
 	case viewInbox, viewArchive:
 		return m.handleListKey(msg)
-
-	case viewThreads:
-		return m.handleThreadsKey(msg)
 
 	case viewMessage:
 		return m.handleMessageKey(msg)
@@ -305,32 +290,9 @@ func (m *model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// Reload current view
 			if m.view == viewArchive {
 				m.loadArchive()
-			} else if m.view == viewThreads {
-				m.loadThreads()
 			} else {
 				m.loadInbox()
 			}
-		}
-	}
-	return m, nil
-}
-
-func (m *model) handleThreadsKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "j", "down":
-		m.list.CursorDown()
-	case "k", "up":
-		m.list.CursorUp()
-	case "g":
-		m.list.GoToStart()
-	case "G":
-		m.list.GoToEnd()
-	case "enter":
-		if m.list.SelectedItem() != nil {
-			item := m.list.SelectedItem().(MailItem)
-			m.selectedID = item.id
-			m.loadMessage(item.id)
-			m.view = viewMessage
 		}
 	}
 	return m, nil
@@ -474,8 +436,6 @@ func (m *model) updateList() {
 	listTitle := "INBOX"
 	if m.view == viewArchive {
 		listTitle = "ARCHIVE"
-	} else if m.view == viewThreads {
-		listTitle = "THREADS"
 	}
 
 	m.list = list.New(items, delegate, m.width, m.height-3)
@@ -522,26 +482,6 @@ func (m *model) updateViewportForThread(thread *mail.Thread) {
 	}
 
 	m.viewport.SetContent(b.String())
-}
-
-func (m *model) loadThreads() {
-	threads, err := m.store.ListThreadsForRecipient(m.cfg.AgentName())
-	if err != nil {
-		m.threads = nil
-		return
-	}
-	m.threads = threads
-
-	items := make([]list.Item, len(threads))
-	for i, t := range threads {
-		items[i] = MailItem{
-			id:      t.ID,
-			from:    fmt.Sprintf("%d messages", t.MessageCount),
-			subject: t.Subject,
-			date:    t.LastMessage.Format("Jan 02 15:04"),
-		}
-	}
-	m.list = list.New(items, m.newStyledDelegate(), m.width, m.height-3)
 }
 
 func (m *model) newStyledDelegate() list.DefaultDelegate {
@@ -651,8 +591,6 @@ func (m *model) View() string {
 		m.renderInbox(&b)
 	case viewArchive:
 		m.renderArchive(&b)
-	case viewThreads:
-		m.renderThreads(&b)
 	case viewMessage:
 		m.renderMessage(&b)
 	case viewCompose:
@@ -671,7 +609,6 @@ func (m *model) renderHeader(b *strings.Builder) {
 	viewNames := map[string]string{
 		viewInbox:   "INBOX",
 		viewArchive: "ARCHIVE",
-		viewThreads: "THREADS",
 		viewMessage: "MESSAGE",
 		viewCompose: "COMPOSE",
 		viewHelp:    "HELP",
@@ -693,10 +630,6 @@ func (m *model) renderInbox(b *strings.Builder) {
 }
 
 func (m *model) renderArchive(b *strings.Builder) {
-	b.WriteString(m.list.View())
-}
-
-func (m *model) renderThreads(b *strings.Builder) {
 	b.WriteString(m.list.View())
 }
 
@@ -788,11 +721,9 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "i:inbox u:unread r:archive t:threads | j/k:up/down a:archive c:compose q:quit ?/help"
+		footer = "i:inbox u:unread r:archive | j/k:up/down a:archive c:compose q:quit ?/help"
 	case viewArchive:
-		footer = "i:inbox u:unread r:archive t:threads | j/k:up/down a:archive c:compose q:quit"
-	case viewThreads:
-		footer = "i:inbox u:unread t:threads | j/k:up/down a:archive c:compose q:quit"
+		footer = "i:inbox u:unread r:archive | j/k:up/down a:archive c:compose q:quit"
 	case viewMessage:
 		footer = "a:archive | q:back"
 	case viewCompose:
