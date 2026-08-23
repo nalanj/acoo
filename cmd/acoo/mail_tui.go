@@ -701,22 +701,6 @@ func (m *model) renderCompose(b *strings.Builder) {
 	}
 	b.WriteString("\n")
 
-	// Show agent list when To field is focused
-	if m.composeTo.Focused() && len(m.composeAgents) > 0 {
-		b.WriteString(helpStyle.Render("  Agents: "))
-		for i, agent := range m.composeAgents {
-			if i > 0 {
-				b.WriteString(helpStyle.Render(", "))
-			}
-			if m.composeTo.Value() != "" && strings.HasPrefix(strings.ToLower(agent), strings.ToLower(m.composeTo.Value())) {
-				b.WriteString(itemStyle.Render(agent))
-			} else {
-				b.WriteString(helpStyle.Render(agent))
-			}
-		}
-		b.WriteString("\n")
-	}
-
 	// Subject field
 	b.WriteString(titleStyle.Render("  Subject: "))
 	b.WriteString(m.composeSubject.View())
