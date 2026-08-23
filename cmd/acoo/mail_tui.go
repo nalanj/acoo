@@ -723,11 +723,11 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "i:inbox a:archive t:threads | j/k:up/down Enter:view d:archive r:reply n:new q:quit ?/help"
+		footer = "i:inbox a:archive t:threads | j/k:up/down d:archive r:reply n:new q:quit ?/help"
 	case viewArchive:
-		footer = "i:inbox a:archive t:threads | j/k:up/down Enter:view d:archive n:new q:quit"
+		footer = "i:inbox a:archive t:threads | j/k:up/down d:archive n:new q:quit"
 	case viewThreads:
-		footer = "i:inbox t:threads | j/k:up/down Enter:view n:new q:quit"
+		footer = "i:inbox t:threads | j/k:up/down n:new q:quit"
 	case viewMessage:
 		footer = "r:reply a:archive | q:back"
 	case viewCompose:
