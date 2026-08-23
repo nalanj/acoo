@@ -85,6 +85,8 @@ type model struct {
 	composeSubject  textinput.Model
 	composeBody     textarea.Model
 	composeError    string
+	composeThread   string  // Thread ID for replies
+	composeParent   string  // Parent message ID for replies
 
 	quitting bool
 	width    int
@@ -217,7 +219,7 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "n":
 		if m.view != viewCompose {
-			m.startCompose("", "", "")
+			m.startCompose("", "", "", "", "")
 		}
 		return m, nil
 	}
@@ -506,11 +508,13 @@ func (m *model) newStyledDelegate() list.DefaultDelegate {
 	return delegate
 }
 
-func (m *model) startCompose(to, subject, body string) {
+func (m *model) startCompose(to, subject, body string, threadID string, parentID string) {
 	m.composeTo.SetValue(to)
 	m.composeSubject.SetValue(subject)
 	m.composeBody.SetValue(body)
 	m.composeError = ""
+	m.composeThread = threadID
+	m.composeParent = parentID
 	m.composeTo.Focus()
 	m.view = viewCompose
 }
@@ -527,7 +531,13 @@ func (m *model) startReply(id string) {
 		subject = "Re: " + subject
 	}
 
-	m.startCompose(msg.From, subject, replyBody)
+	// Use the parent message's thread ID
+	threadID := msg.Thread
+	if threadID == "" {
+		threadID = msg.ID
+	}
+
+	m.startCompose(msg.From, subject, replyBody, threadID, msg.ID)
 }
 
 func (m *model) sendCompose() tea.Msg {
@@ -540,6 +550,12 @@ func (m *model) sendCompose() tea.Msg {
 		return nil
 	}
 
+	// Use existing thread ID if replying, otherwise generate new thread
+	threadID := m.composeThread
+	if threadID == "" {
+		threadID = mail.GenerateID()
+	}
+
 	msg := &mail.Message{
 		ID:        mail.GenerateID(),
 		From:      m.cfg.AgentName(),
@@ -547,7 +563,8 @@ func (m *model) sendCompose() tea.Msg {
 		Subject:   subject,
 		Timestamp: time.Now().UTC(),
 		Body:      body,
-		Thread:    mail.GenerateID(),
+		Thread:    threadID,
+		Parent:    m.composeParent,
 	}
 
 	if err := m.store.Save(msg); err != nil {
