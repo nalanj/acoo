@@ -81,10 +81,11 @@ type model struct {
 	selectedID string
 
 	// Compose state
-	composeTo       string
-	composeSubject string
+	composeTo        string
+	composeSubject  string
 	composeBody     string
-	composeField    int // 0=to, 1=subject, 2=body
+	composeField    int    // 0=to, 1=subject, 2=body
+	composeCursor   int    // cursor position within current field
 	composeError    string
 
 	quitting bool
@@ -158,22 +159,30 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "i":
-		m.view = viewInbox
-		m.loadInbox()
+		if m.view != viewCompose {
+			m.view = viewInbox
+			m.loadInbox()
+		}
 		return m, nil
 
 	case "a":
-		m.view = viewArchive
-		m.loadArchive()
+		if m.view != viewCompose {
+			m.view = viewArchive
+			m.loadArchive()
+		}
 		return m, nil
 
 	case "t":
-		m.view = viewThreads
-		m.loadThreads()
+		if m.view != viewCompose {
+			m.view = viewThreads
+			m.loadThreads()
+		}
 		return m, nil
 
 	case "n":
-		m.startCompose("", "", "")
+		if m.view != viewCompose {
+			m.startCompose("", "", "")
+		}
 		return m, nil
 	}
 
@@ -263,12 +272,46 @@ func (m *model) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Handle character input for text fields
+	if len(msg.Runes) > 0 && m.composeField < 2 {
+		r := msg.Runes[0]
+		switch {
+		case r == '\n':
+			// Enter moves to next field
+			if m.composeField < 2 {
+				m.composeField++
+				m.composeCursor = 0
+			}
+		case r == '\b':
+			// Backspace
+			field := m.getComposeField()
+			if m.composeCursor > 0 && len(field) > 0 {
+				newField := field[:m.composeCursor-1] + field[m.composeCursor:]
+				m.setComposeField(newField)
+				m.composeCursor--
+			}
+		default:
+			// Insert character at cursor
+			field := m.getComposeField()
+			if m.composeCursor >= len(field) {
+				field += string(r)
+			} else {
+				field = field[:m.composeCursor] + string(r) + field[m.composeCursor:]
+			}
+			m.setComposeField(field)
+			m.composeCursor++
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "tab":
 		m.composeField = (m.composeField + 1) % 3
+		m.composeCursor = len(m.getComposeField())
 	case "enter":
 		if m.composeField < 2 {
 			m.composeField++
+			m.composeCursor = len(m.getComposeField())
 		}
 	case "ctrl+r":
 		body, err := m.editInEditor(m.composeBody)
@@ -279,8 +322,42 @@ func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.sendCompose
 	case "esc":
 		m.view = viewInbox
+	case "left":
+		if m.composeCursor > 0 {
+			m.composeCursor--
+		}
+	case "right":
+		if m.composeCursor < len(m.getComposeField()) {
+			m.composeCursor++
+		}
+	case "home", "ctrl+a":
+		m.composeCursor = 0
+	case "end", "ctrl+e":
+		m.composeCursor = len(m.getComposeField())
 	}
 	return m, nil
+}
+
+func (m *model) getComposeField() string {
+	switch m.composeField {
+	case 0:
+		return m.composeTo
+	case 1:
+		return m.composeSubject
+	default:
+		return m.composeBody
+	}
+}
+
+func (m *model) setComposeField(value string) {
+	switch m.composeField {
+	case 0:
+		m.composeTo = value
+	case 1:
+		m.composeSubject = value
+	default:
+		m.composeBody = value
+	}
 }
 
 func (m *model) loadInbox() {
@@ -460,6 +537,7 @@ func (m *model) startCompose(to, subject, body string) {
 	m.composeSubject = subject
 	m.composeBody = body
 	m.composeField = 0
+	m.composeCursor = len(to)
 	m.composeError = ""
 	m.view = viewCompose
 }
@@ -470,7 +548,13 @@ func (m *model) startReply(id string) {
 		return
 	}
 	replyBody := "\n\n> " + strings.ReplaceAll(msg.Body, "\n", "\n> ")
-	m.startCompose(msg.From, "Re: "+msg.Subject, replyBody)
+
+	subject := msg.Subject
+	if !strings.HasPrefix(subject, "Re: ") {
+		subject = "Re: " + subject
+	}
+
+	m.startCompose(msg.From, subject, replyBody)
 }
 
 func (m *model) sendCompose() tea.Msg {
@@ -526,13 +610,21 @@ func (m *model) editInEditor(content string) (string, error) {
 	}
 	tmpfile.Close()
 
+	// Exit alternate screen before running editor
+	fmt.Print("\033[?1049l")
+
 	execCmd := exec.Command(editor, tmpfile.Name())
 	execCmd.Stdin = os.Stdin
 	execCmd.Stdout = os.Stdout
 	execCmd.Stderr = os.Stderr
 	if err := execCmd.Run(); err != nil {
+		// Re-enter alternate screen on error
+		fmt.Print("\033[?1049h")
 		return "", err
 	}
+
+	// Re-enter alternate screen
+	fmt.Print("\033[?1049h")
 
 	data, err := os.ReadFile(tmpfile.Name())
 	if err != nil {
@@ -612,48 +704,53 @@ func (m *model) renderMessage(b *strings.Builder) {
 }
 
 func (m *model) renderCompose(b *strings.Builder) {
-	fields := []string{
-		fmt.Sprintf("To:      [%s]", m.composeTo),
-		fmt.Sprintf("Subject: [%s]", m.composeSubject),
-		"Body:",
-		"",
-	}
+	b.WriteString(titleStyle.Render("New Message"))
+	b.WriteString("\n")
+	b.WriteString(helpStyle.Render("Fill in fields below. Type to edit. Tab=next field.\n"))
+	b.WriteString(helpStyle.Render("─────────────────────────────────────────────────────\n"))
 
-	labels := []string{"→ To: ", "  Subject: ", "  Body: "}
+	fields := []string{m.composeTo, m.composeSubject, m.composeBody}
+	labels := []string{"To:", "Subject:", "Body:"}
+	placeholders := []string{"[recipient]", "[subject]", "[body - Ctrl+R to edit]"}
 
-	for i, f := range fields {
+	for i := range fields {
+		label := labels[i]
+		value := fields[i]
+		placeholder := placeholders[i]
+		isActive := i == m.composeField
+
 		prefix := "  "
-		if i == m.composeField {
-			prefix = labels[i]
-			if i < 2 {
-				b.WriteString(helpStyle.Render(prefix))
-				b.WriteString(itemStyle.Render(f))
+		if isActive {
+			prefix = "▸ "
+		}
+
+		if isActive {
+			if value == "" {
+				b.WriteString(titleStyle.Render(prefix))
+				b.WriteString(itemStyle.Render(fmt.Sprintf("%-10s%s", label, helpStyle.Render(placeholder))))
 			} else {
-				b.WriteString(helpStyle.Render(prefix))
-				b.WriteString(itemStyle.Render(" Edit body (Ctrl+R to open editor)"))
+				b.WriteString(titleStyle.Render(prefix))
+				b.WriteString(itemStyle.Render(fmt.Sprintf("%-10s%s", label, value)))
 			}
 		} else {
-			if i < 2 {
-				b.WriteString(helpStyle.Render(prefix))
-				b.WriteString(itemStyle.Render(f))
+			if value == "" {
+				b.WriteString(helpStyle.Render(fmt.Sprintf("%s%-10s%s", prefix, label, placeholder)))
 			} else {
-				// Show truncated body preview
-				bodyPreview := m.composeBody
-				if len(bodyPreview) > 60 {
-					bodyPreview = bodyPreview[:60] + "..."
-				}
-				bodyPreview = strings.ReplaceAll(bodyPreview, "\n", " ")
-				b.WriteString(helpStyle.Render(prefix))
-				b.WriteString(itemStyle.Render(bodyPreview))
+				b.WriteString(helpStyle.Render(fmt.Sprintf("%s%-10s", prefix, label)))
+				b.WriteString(itemStyle.Render(value))
 			}
 		}
 		b.WriteString("\n")
 	}
 
+	b.WriteString(helpStyle.Render("─────────────────────────────────────────────────────\n"))
+
 	if m.composeError != "" {
 		b.WriteString(statusErrStyle.Render("Error: " + m.composeError))
 		b.WriteString("\n")
 	}
+
+	b.WriteString(helpStyle.Render("\nCtrl+R=edit body in $EDITOR | Ctrl+S=send | q=cancel\n"))
 }
 
 func (m *model) renderHelp(b *strings.Builder) {
