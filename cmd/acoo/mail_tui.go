@@ -544,7 +544,6 @@ func (m *model) startReply(id string) {
 	if err != nil {
 		return
 	}
-	replyBody := "\n\n> " + strings.ReplaceAll(msg.Body, "\n", "\n> ")
 
 	subject := msg.Subject
 	if !strings.HasPrefix(subject, "Re: ") {
@@ -557,7 +556,7 @@ func (m *model) startReply(id string) {
 		threadID = msg.ID
 	}
 
-	m.startCompose(msg.From, subject, replyBody, threadID, msg.ID)
+	m.startCompose(msg.From, subject, "", threadID, msg.ID)
 }
 
 func (m *model) sendCompose() tea.Msg {
