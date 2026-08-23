@@ -130,6 +130,7 @@ Example:
 	root.AddCommand(agentCmd)
 	root.AddCommand(providersCmd)
 	root.AddCommand(dbCmd)
+	root.AddCommand(buildMailCommands())
 
 	return root
 }

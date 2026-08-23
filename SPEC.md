@@ -290,6 +290,7 @@ cmd/acoo/
   subprocess.go     # Subprocess entry for job execution
   wizard.go         # TUI for creating agents
   web.go            # Web UI server
+  mail.go           # Mail commands
   daemon/
     ipc.go          # IPC server and client for storage operations
   templates/
@@ -313,7 +314,53 @@ internal/
     factory.go      # LLM provider factory
   storage/
     store.go        # Pebble-based session persistence
+  mail/
+    config.go       # Mail configuration
+    message.go      # Message store and types
+    archive.go      # Archive management
+    symlink.go      # Inbox symlink management
 ```
+
+## Mail Commands
+
+ACOO includes built-in messaging for inter-agent communication.
+
+```bash
+acoo mail inbox          # List messages in inbox
+acoo mail send <to>      # Send a message
+acoo mail read <id>      # Read a message
+acoo mail reply <id>     # Reply to a message
+acoo mail archive <id>    # Archive a message
+acoo mail threads        # List threads
+acoo mail thread <id>    # View a thread
+acoo mail agents         # List known agents
+```
+
+### Mail Spool
+
+Messages are stored in:
+```
+~/.local/share/acoo/mail/
+├── messages/           # Source of truth
+├── inbox/              # Symlinks for nalanj
+└── archive/            # Archived messages
+```
+
+### Mail Tools
+
+Agents have access to mail tools:
+
+| Tool | Description |
+|------|-------------|
+| `mail_inbox` | Check inbox for new messages |
+| `mail_send` | Send message to a recipient |
+| `mail_read` | Read a message by ID |
+| `mail_reply` | Reply to a message |
+| `mail_archive` | Archive a message |
+
+### Mail Skill
+
+The `agent-mail` skill provides documentation for mail commands.
 
 ## Dependencies
 
