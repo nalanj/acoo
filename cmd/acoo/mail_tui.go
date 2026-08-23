@@ -111,13 +111,9 @@ func newModel() (*model, error) {
 	composeTo := textinput.New()
 	composeTo.Placeholder = "recipient"
 	composeTo.Focus()
-	composeTo.PromptStyle = titleStyle
-	composeTo.TextStyle = itemStyle
 
 	composeSubject := textinput.New()
 	composeSubject.Placeholder = "subject"
-	composeSubject.PromptStyle = titleStyle
-	composeSubject.TextStyle = itemStyle
 
 	composeBody := textarea.New()
 	composeBody.Placeholder = "message body..."
@@ -680,10 +676,10 @@ func (m *model) renderCompose(b *strings.Builder) {
 
 	// To field with inline autocomplete
 	b.WriteString(titleStyle.Render("  To: "))
-	input := m.composeTo.Value()
-	b.WriteString(itemStyle.Render(input))
+	b.WriteString(m.composeTo.View())
 
 	// Show autocomplete suggestion when typing in To field
+	input := m.composeTo.Value()
 	if m.composeTo.Focused() && input != "" && len(m.composeAgents) > 0 {
 		prefix := strings.ToLower(input)
 		var match string
@@ -703,7 +699,6 @@ func (m *model) renderCompose(b *strings.Builder) {
 	// Subject field
 	b.WriteString(titleStyle.Render("  Subject: "))
 	b.WriteString(m.composeSubject.View())
-	b.WriteString("\n")
 
 	// Body field
 	b.WriteString(titleStyle.Render("  Body:"))
