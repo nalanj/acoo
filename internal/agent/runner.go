@@ -321,8 +321,7 @@ func (r *Runner) executeJob(ctx context.Context, jobName string, job *config.Job
 	cmd := exec.Command(execPath, cmdArgs...)
 	cmd.Env = env
 	cmd.Dir = r.workspace
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// Don't pipe stdout/stderr - agent output is too verbose for server logs
 
 	r.Logger.Info("subprocess_started", log.F("job", job.Name), log.F("executable", execPath), log.F("dir", r.workspace))
 
