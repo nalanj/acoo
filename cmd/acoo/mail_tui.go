@@ -87,6 +87,7 @@ type model struct {
 	composeError    string
 	composeThread   string  // Thread ID for replies
 	composeParent   string  // Parent message ID for replies
+	composeAgents   []string  // Available agents for autocomplete
 
 	quitting bool
 	width    int
@@ -518,6 +519,9 @@ func (m *model) startCompose(to, subject, body string, threadID string, parentID
 	m.composeParent = parentID
 	m.composeTo.Focus()
 	m.view = viewCompose
+
+	// Load available agents for autocomplete
+	m.composeAgents, _ = m.inboxMgr.ListAgents()
 }
 
 func (m *model) startReply(id string) {
@@ -663,6 +667,18 @@ func (m *model) renderCompose(b *strings.Builder) {
 	// To field
 	b.WriteString(titleStyle.Render("  To: "))
 	b.WriteString(m.composeTo.View())
+
+	// Show agent suggestions when To field is focused and empty
+	if m.composeTo.Focused() && m.composeTo.Value() == "" && len(m.composeAgents) > 0 {
+		b.WriteString("\n")
+		b.WriteString(helpStyle.Render("  Suggestions: "))
+		for i, agent := range m.composeAgents {
+			if i > 0 {
+				b.WriteString(helpStyle.Render(", "))
+			}
+			b.WriteString(titleStyle.Render(agent))
+		}
+	}
 	b.WriteString("\n")
 
 	// Subject field
