@@ -122,6 +122,7 @@ func newModel() (*model, error) {
 
 	composeBody := textarea.New()
 	composeBody.Placeholder = "message body..."
+	composeBody.ShowLineNumbers = false
 
 	return &model{
 		cfg:             cfg,
@@ -340,7 +341,7 @@ func (m *model) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "tab", "right":
-		// If in To field, autocomplete
+		// Forward: To -> Subject -> Body
 		if m.composeTo.Focused() {
 			input := m.composeTo.Value()
 			if input != "" {
@@ -352,7 +353,6 @@ func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 					}
 				}
 			}
-			// Tab or right arrow moves to next field
 			m.composeTo.Blur()
 			m.composeSubject.Focus()
 		} else if m.composeSubject.Focused() {
@@ -361,6 +361,18 @@ func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		} else {
 			m.composeBody.Blur()
 			m.composeTo.Focus()
+		}
+	case "shift+tab":
+		// Backward: Body -> Subject -> To
+		if m.composeBody.Focused() {
+			m.composeBody.Blur()
+			m.composeSubject.Focus()
+		} else if m.composeSubject.Focused() {
+			m.composeSubject.Blur()
+			m.composeTo.Focus()
+		} else {
+			m.composeTo.Blur()
+			m.composeBody.Focus()
 		}
 	case "enter", "ctrl+enter", "ctrl+j":
 		// Send the message
