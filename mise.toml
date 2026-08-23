@@ -1,0 +1,14 @@
+[tasks.build]
+dir = "."
+command = "go build -o ./acoo ./cmd/acoo/"
+description = "Build acoo binary"
+
+[tasks.install]
+dir = "."
+command = "go build -o ~/.local/bin/acoo ./cmd/acoo/"
+description = "Build and install acoo to ~/.local/bin/"
+
+[tasks.test]
+dir = "."
+command = "go test ./..."
+description = "Run tests"
