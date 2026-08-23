@@ -58,6 +58,8 @@ const (
 	viewHelp     = "help"
 )
 
+const refreshInterval = 5 * time.Second
+
 // MailItem for list
 type MailItem struct {
 	id      string
@@ -82,6 +84,7 @@ type model struct {
 	messages   []*mail.Message
 	threads    []*mail.Thread
 	selectedID string
+	refreshTick int // Counter to trigger list refresh
 
 	// Compose state
 	composeTo       textinput.Model
@@ -133,8 +136,14 @@ func newModel() (*model, error) {
 }
 
 func (m *model) Init() tea.Cmd {
-	// Don't load inbox here - wait for WindowSizeMsg to set dimensions first
-	return nil
+	// Start a ticker to refresh lists periodically
+	return tea.Tick(refreshInterval, func(t time.Time) tea.Msg {
+		return tickMsg{t}
+	})
+}
+
+type tickMsg struct {
+	time time.Time
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -169,6 +178,21 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.loadInbox()
 		}
 		return m, nil
+
+	case tickMsg:
+		// Refresh lists periodically
+		switch m.view {
+		case viewInbox:
+			m.loadInbox()
+		case viewArchive:
+			m.loadArchive()
+		case viewThreads:
+			m.loadThreads()
+		}
+		// Continue ticking
+		return m, tea.Tick(refreshInterval, func(t time.Time) tea.Msg {
+			return tickMsg{t}
+		})
 
 	case tea.KeyMsg:
 		return m.handleKey(msg)
