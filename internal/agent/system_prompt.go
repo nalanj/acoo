@@ -11,40 +11,31 @@ import (
 func BuildSystemPrompt(agentBody string, agentName string, tools []fantasy.AgentTool, skills []Skill, workspacePath string) string {
 	var parts []string
 
-	// SKILLS AT THE TOP - before agent body, before everything
-	if len(skills) > 0 {
-		parts = append(parts, BuildSkillsSection(skills))
-	}
-
-	// Agent identity
+	// Agent identity - at the top, prominent
 	if agentName != "" {
-		parts = append(parts, fmt.Sprintf("Your name is %s.", agentName))
+		parts = append(parts, fmt.Sprintf("You are %s.", agentName))
 	}
 
 	// Agent body
 	if agentBody != "" {
-		if len(parts) > 0 {
-			parts = append(parts, "")
-		}
 		parts = append(parts, strings.TrimSpace(agentBody))
 	}
 
 	// Workspace guidance
 	if workspacePath != "" {
-		parts = append(parts, "", fmt.Sprintf("You have a special workspace folder, located at %s, where you're able to add new files. Avoid writing to files anywhere else unless specifically asked to do so. It's your job to keep your workspace folder tidy, so feel free to take a moment at any time to do so.", workspacePath))
+		parts = append(parts, "", fmt.Sprintf("Your workspace folder is %s. Write files there instead of elsewhere.", workspacePath))
 	}
 
 	// Tools section
 	if len(tools) > 0 {
-		parts = append(parts, "", "You have access to the following tools:", "")
+		parts = append(parts, "", "You have access to these tools:")
 		for _, tool := range tools {
 			info := tool.Info()
-			parts = append(parts, info.Name+" - "+info.Description)
+			parts = append(parts, "- "+info.Name+": "+info.Description)
 		}
-		parts = append(parts, "", "Prefer direct tools over bash when possible. For example, use glob to find files by name rather than 'find' or 'ls' commands.")
 	}
 
-	// Skills section - AFTER agent body and tools
+	// Skills section - at the end
 	if len(skills) > 0 {
 		parts = append(parts, "", BuildSkillsSection(skills))
 	}
