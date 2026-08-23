@@ -112,7 +112,7 @@ func newModel() (*model, error) {
 }
 
 func (m *model) Init() tea.Cmd {
-	m.loadInbox()
+	// Don't load inbox here - wait for WindowSizeMsg to set dimensions first
 	return nil
 }
 
@@ -122,6 +122,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport = viewport.New(msg.Width, msg.Height-3)
+		// Load inbox now that we have dimensions
+		if m.view == viewInbox {
+			m.loadInbox()
+		}
 		return m, nil
 
 	case tea.KeyMsg:
@@ -358,7 +362,14 @@ func (m *model) updateList() {
 			date:    msg.Timestamp.Format("Jan 02 15:04"),
 		}
 	}
-	m.list = list.New(items, list.NewDefaultDelegate(), m.width, m.height-3)
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles = list.NewDefaultItemStyles()
+	delegate.Styles.NormalTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#c0caf5"))
+	delegate.Styles.NormalDesc = lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89"))
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#bb9af7")).Background(lipgloss.Color("#24283b"))
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(lipgloss.Color("#7dcfff")).Background(lipgloss.Color("#24283b"))
+	delegate.ShowDescription = true
+	m.list = list.New(items, delegate, m.width, m.height-3)
 }
 
 func (m *model) loadMessage(id string) {
@@ -399,7 +410,18 @@ func (m *model) loadThreads() {
 			date:    t.LastMessage.Format("Jan 02 15:04"),
 		}
 	}
-	m.list = list.New(items, list.NewDefaultDelegate(), m.width, m.height-3)
+	m.list = list.New(items, m.newStyledDelegate(), m.width, m.height-3)
+}
+
+func (m *model) newStyledDelegate() list.DefaultDelegate {
+	delegate := list.NewDefaultDelegate()
+	delegate.Styles = list.NewDefaultItemStyles()
+	delegate.Styles.NormalTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#c0caf5"))
+	delegate.Styles.NormalDesc = lipgloss.NewStyle().Foreground(lipgloss.Color("#565f89"))
+	delegate.Styles.SelectedTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#bb9af7")).Background(lipgloss.Color("#24283b"))
+	delegate.Styles.SelectedDesc = lipgloss.NewStyle().Foreground(lipgloss.Color("#7dcfff")).Background(lipgloss.Color("#24283b"))
+	delegate.ShowDescription = true
+	return delegate
 }
 
 func (m *model) startCompose(to, subject, body string) {
