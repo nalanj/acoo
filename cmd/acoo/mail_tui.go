@@ -657,9 +657,7 @@ func (m *model) renderMessage(b *strings.Builder) {
 }
 
 func (m *model) renderCompose(b *strings.Builder) {
-	b.WriteString(titleStyle.Render("New Message"))
-	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Tab=next field | Enter/Ctrl+J=send | q=cancel\n"))
+	b.WriteString(titleStyle.Render("New Message\n"))
 	b.WriteString(borderStyle.Render(strings.Repeat("─", m.width)))
 	b.WriteString("\n")
 
