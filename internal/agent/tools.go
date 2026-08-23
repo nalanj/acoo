@@ -239,6 +239,8 @@ func MailSendTool() fantasy.AgentTool {
 
 		inboxMgr := mail.NewInboxManager(cfg.MessagesDir)
 		if err := inboxMgr.AddToInboxes(msg); err != nil {
+			// Clean up the saved message file since inbox creation failed
+			store.Delete(msg.ID)
 			return fantasy.NewTextErrorResponse("Error adding to inbox: " + err.Error()), nil
 		}
 
@@ -324,6 +326,8 @@ func MailReplyTool() fantasy.AgentTool {
 
 		inboxMgr := mail.NewInboxManager(cfg.MessagesDir)
 		if err := inboxMgr.AddToInboxes(msg); err != nil {
+			// Clean up the saved message file since inbox creation failed
+			store.Delete(msg.ID)
 			return fantasy.NewTextErrorResponse("Error adding to inbox: " + err.Error()), nil
 		}
 

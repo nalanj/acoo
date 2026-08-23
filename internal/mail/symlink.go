@@ -17,6 +17,8 @@ func NewInboxManager(messagesDir string) *InboxManager {
 	}
 }
 
+// AddToInboxes creates symlinks in recipients' inboxes. Call after saving the message.
+// If this fails, the message file is NOT cleaned up - caller should handle that.
 func (m *InboxManager) AddToInboxes(msg *Message) error {
 	for _, recipient := range msg.To {
 		inboxPath, err := m.inboxPath(recipient)
@@ -29,7 +31,7 @@ func (m *InboxManager) AddToInboxes(msg *Message) error {
 		}
 
 		linkPath := filepath.Join(inboxPath, msg.ID+".md")
-		
+
 		// Calculate relative path from inbox to messages
 		var targetPath string
 		if recipient == "nalanj" {
@@ -47,6 +49,18 @@ func (m *InboxManager) AddToInboxes(msg *Message) error {
 	}
 
 	return nil
+}
+
+// RemoveFromAllInboxes removes symlinks for a message from all recipients' inboxes.
+func (m *InboxManager) RemoveFromAllInboxes(msg *Message) {
+	for _, recipient := range msg.To {
+		inboxPath, err := m.inboxPath(recipient)
+		if err != nil {
+			continue
+		}
+		linkPath := filepath.Join(inboxPath, msg.ID+".md")
+		os.Remove(linkPath)
+	}
 }
 
 func (m *InboxManager) RemoveFromInbox(msgID string, recipient string) error {

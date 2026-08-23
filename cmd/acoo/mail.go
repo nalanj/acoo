@@ -146,6 +146,8 @@ func mailSendCmd() *cobra.Command {
 
 			inboxMgr := mail.NewInboxManager(cfg.MessagesDir)
 			if err := inboxMgr.AddToInboxes(msg); err != nil {
+				// Clean up the saved message file since inbox creation failed
+				store.Delete(msg.ID)
 				return err
 			}
 
@@ -270,6 +272,8 @@ func mailReplyCmd() *cobra.Command {
 
 			inboxMgr := mail.NewInboxManager(cfg.MessagesDir)
 			if err := inboxMgr.AddToInboxes(msg); err != nil {
+				// Clean up the saved message file since inbox creation failed
+				store.Delete(msg.ID)
 				return err
 			}
 

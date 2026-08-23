@@ -128,6 +128,17 @@ func (s *Store) Update(msg *Message) error {
 	return nil
 }
 
+func (s *Store) Delete(id string) error {
+	filename := s.messagePath(id)
+	if err := os.Remove(filename); err != nil {
+		if os.IsNotExist(err) {
+			return nil // Already deleted
+		}
+		return fmt.Errorf("deleting message: %w", err)
+	}
+	return nil
+}
+
 func (s *Store) ListMessages() ([]*Message, error) {
 	entries, err := os.ReadDir(s.messagesDir)
 	if err != nil {

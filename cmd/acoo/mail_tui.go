@@ -563,6 +563,8 @@ func (m *model) sendCompose() tea.Msg {
 	}
 
 	if err := m.inboxMgr.AddToInboxes(msg); err != nil {
+		// Clean up the saved message file since inbox creation failed
+		m.store.Delete(msg.ID)
 		m.composeError = err.Error()
 		return nil
 	}
