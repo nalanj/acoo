@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"charm.land/fantasy"
+
+	"github.com/nalanj/acoo/internal/mail"
 )
 
 // Tools returns the standard tools available to all agents
@@ -152,6 +155,18 @@ func ListDirTool() fantasy.AgentTool {
 	return fantasy.NewAgentTool("list_dir", "List contents of a directory", fn)
 }
 
+// agentMailConfig returns the mail config for the current agent
+func agentMailConfig() (*mail.Config, error) {
+	cfg, err := mail.Default()
+	if err != nil {
+		return nil, err
+	}
+	if err := cfg.EnsureDirs(); err != nil {
+		return nil, err
+	}
+	return cfg, nil
+}
+
 // MailInboxTool returns a tool for checking inbox
 func MailInboxTool() fantasy.AgentTool {
 	type MailInboxInput struct {
@@ -159,15 +174,35 @@ func MailInboxTool() fantasy.AgentTool {
 	}
 
 	fn := func(ctx context.Context, input MailInboxInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-		cmd := exec.Command("agent-mail", "inbox")
-		if input.All {
-			cmd.Args = append(cmd.Args, "--all")
-		}
-		output, err := cmd.CombinedOutput()
+		cfg, err := agentMailConfig()
 		if err != nil {
-			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+			return fantasy.NewTextErrorResponse("Error getting mail config: " + err.Error()), nil
 		}
-		return fantasy.NewTextResponse(string(output)), nil
+
+		store := mail.NewStore(cfg.MessagesDir)
+		inboxMgr := mail.NewInboxManager(cfg.MessagesDir)
+
+		agentName := cfg.AgentName()
+		inboxIDs, err := inboxMgr.ListInboxMessages(agentName)
+		if err != nil {
+			return fantasy.NewTextErrorResponse("Error listing inbox: " + err.Error()), nil
+		}
+
+		if len(inboxIDs) == 0 {
+			return fantasy.NewTextResponse("No messages in inbox."), nil
+		}
+
+		var lines []string
+		for _, id := range inboxIDs {
+			msg, err := store.Load(id)
+			if err != nil {
+				continue
+			}
+			date := msg.Timestamp.Format("2006-01-02 15:04")
+			lines = append(lines, fmt.Sprintf("%s | From: %s | Subject: %s | Date: %s", msg.ID[:17], msg.From, msg.Subject, date))
+		}
+
+		return fantasy.NewTextResponse("Messages in inbox:\n" + strings.Join(lines, "\n")), nil
 	}
 
 	return fantasy.NewAgentTool("mail_inbox", "Check inbox for new messages", fn)
@@ -182,21 +217,32 @@ func MailSendTool() fantasy.AgentTool {
 	}
 
 	fn := func(ctx context.Context, input MailSendInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-		// Write body to temp file
-		tmpfile, err := os.CreateTemp("", "agent-mail-*.txt")
+		cfg, err := agentMailConfig()
 		if err != nil {
-			return fantasy.NewTextErrorResponse("Error creating temp file: " + err.Error()), nil
+			return fantasy.NewTextErrorResponse("Error getting mail config: " + err.Error()), nil
 		}
-		defer os.Remove(tmpfile.Name())
-		tmpfile.WriteString(input.Body)
-		tmpfile.Close()
 
-		cmd := exec.Command("agent-mail", "send", input.Recipient, "-s", input.Subject, "-b", tmpfile.Name())
-		output, err := cmd.CombinedOutput()
-		if err != nil {
-			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+		msg := &mail.Message{
+			ID:        mail.GenerateID(),
+			From:      cfg.AgentName(),
+			To:        []string{input.Recipient},
+			Subject:   input.Subject,
+			Timestamp: time.Now().UTC(),
+			Body:      input.Body,
+			Thread:    mail.GenerateID(),
 		}
-		return fantasy.NewTextResponse(string(output)), nil
+
+		store := mail.NewStore(cfg.MessagesDir)
+		if err := store.Save(msg); err != nil {
+			return fantasy.NewTextErrorResponse("Error saving message: " + err.Error()), nil
+		}
+
+		inboxMgr := mail.NewInboxManager(cfg.MessagesDir)
+		if err := inboxMgr.AddToInboxes(msg); err != nil {
+			return fantasy.NewTextErrorResponse("Error adding to inbox: " + err.Error()), nil
+		}
+
+		return fantasy.NewTextResponse("Message sent: " + msg.ID), nil
 	}
 
 	return fantasy.NewAgentTool("mail_send", "Send a message to a recipient", fn)
@@ -209,12 +255,29 @@ func MailReadTool() fantasy.AgentTool {
 	}
 
 	fn := func(ctx context.Context, input MailReadInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-		cmd := exec.Command("agent-mail", "read", input.MessageID)
-		output, err := cmd.CombinedOutput()
+		cfg, err := agentMailConfig()
 		if err != nil {
-			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+			return fantasy.NewTextErrorResponse("Error getting mail config: " + err.Error()), nil
 		}
-		return fantasy.NewTextResponse(string(output)), nil
+
+		store := mail.NewStore(cfg.MessagesDir)
+		msg, err := store.Load(input.MessageID)
+		if err != nil {
+			return fantasy.NewTextErrorResponse("Error loading message: " + err.Error()), nil
+		}
+
+		date := msg.Timestamp.Format("2006-01-02 15:04")
+		var lines []string
+		lines = append(lines, fmt.Sprintf("From: %s", msg.From))
+		lines = append(lines, fmt.Sprintf("Subject: %s", msg.Subject))
+		lines = append(lines, fmt.Sprintf("Date: %s", date))
+		if msg.Parent != "" {
+			lines = append(lines, fmt.Sprintf("Reply-To: %s", msg.Parent))
+		}
+		lines = append(lines, "")
+		lines = append(lines, msg.Body)
+
+		return fantasy.NewTextResponse(strings.Join(lines, "\n")), nil
 	}
 
 	return fantasy.NewAgentTool("mail_read", "Read a message by ID", fn)
@@ -228,21 +291,43 @@ func MailReplyTool() fantasy.AgentTool {
 	}
 
 	fn := func(ctx context.Context, input MailReplyInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-		// Write body to temp file
-		tmpfile, err := os.CreateTemp("", "agent-mail-*.txt")
+		cfg, err := agentMailConfig()
 		if err != nil {
-			return fantasy.NewTextErrorResponse("Error creating temp file: " + err.Error()), nil
+			return fantasy.NewTextErrorResponse("Error getting mail config: " + err.Error()), nil
 		}
-		defer os.Remove(tmpfile.Name())
-		tmpfile.WriteString(input.Body)
-		tmpfile.Close()
 
-		cmd := exec.Command("agent-mail", "reply", input.MessageID, "-b", tmpfile.Name())
-		output, err := cmd.CombinedOutput()
+		store := mail.NewStore(cfg.MessagesDir)
+		parent, err := store.Load(input.MessageID)
 		if err != nil {
-			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+			return fantasy.NewTextErrorResponse("Error loading parent message: " + err.Error()), nil
 		}
-		return fantasy.NewTextResponse(string(output)), nil
+
+		replySubject := "Re: " + parent.Subject
+		msg := &mail.Message{
+			ID:        mail.GenerateID(),
+			From:      cfg.AgentName(),
+			To:        []string{parent.From},
+			Subject:   replySubject,
+			Thread:    parent.Thread,
+			Parent:    parent.ID,
+			Timestamp: time.Now().UTC(),
+			Body:      input.Body,
+		}
+
+		if msg.Thread == "" {
+			msg.Thread = msg.ID
+		}
+
+		if err := store.Save(msg); err != nil {
+			return fantasy.NewTextErrorResponse("Error saving reply: " + err.Error()), nil
+		}
+
+		inboxMgr := mail.NewInboxManager(cfg.MessagesDir)
+		if err := inboxMgr.AddToInboxes(msg); err != nil {
+			return fantasy.NewTextErrorResponse("Error adding to inbox: " + err.Error()), nil
+		}
+
+		return fantasy.NewTextResponse("Reply sent: " + msg.ID), nil
 	}
 
 	return fantasy.NewAgentTool("mail_reply", "Reply to a message", fn)
@@ -255,12 +340,23 @@ func MailArchiveTool() fantasy.AgentTool {
 	}
 
 	fn := func(ctx context.Context, input MailArchiveInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
-		cmd := exec.Command("agent-mail", "archive", input.MessageID)
-		output, err := cmd.CombinedOutput()
+		cfg, err := agentMailConfig()
 		if err != nil {
-			return fantasy.NewTextErrorResponse(string(output) + "\nError: " + err.Error()), nil
+			return fantasy.NewTextErrorResponse("Error getting mail config: " + err.Error()), nil
 		}
-		return fantasy.NewTextResponse(string(output)), nil
+
+		store := mail.NewStore(cfg.MessagesDir)
+		msg, err := store.Load(input.MessageID)
+		if err != nil {
+			return fantasy.NewTextErrorResponse("Error loading message: " + err.Error()), nil
+		}
+
+		archiveMgr := mail.NewArchiveManager(cfg.MessagesDir, cfg.MailRoot)
+		if err := archiveMgr.Archive(cfg.AgentName(), msg.ID); err != nil {
+			return fantasy.NewTextErrorResponse("Error archiving message: " + err.Error()), nil
+		}
+
+		return fantasy.NewTextResponse("Archived: " + msg.ID), nil
 	}
 
 	return fantasy.NewAgentTool("mail_archive", "Archive a message", fn)
