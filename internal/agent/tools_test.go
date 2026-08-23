@@ -212,8 +212,8 @@ func TestListDirToolNotFound(t *testing.T) {
 
 func TestTools(t *testing.T) {
 	tools := Tools()
-	if len(tools) != 5 {
-		t.Errorf("Tools() returned %d tools, want 5", len(tools))
+	if len(tools) != 10 {
+		t.Errorf("Tools() returned %d tools, want 10", len(tools))
 	}
 
 	names := []string{}
@@ -221,7 +221,7 @@ func TestTools(t *testing.T) {
 		names = append(names, tool.Info().Name)
 	}
 
-	expected := []string{"read_file", "edit_file", "bash", "glob", "list_dir"}
+	expected := []string{"read_file", "edit_file", "bash", "glob", "list_dir", "mail_inbox", "mail_send", "mail_read", "mail_reply", "mail_archive"}
 	for _, exp := range expected {
 		found := false
 		for _, name := range names {
