@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -139,7 +138,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 
 	// Run immediately for @once
 	if sched.IsOneShot() {
-		r.executeJob(jobName, job)
+		r.executeJob(ctx, jobName, job)
 		return
 	}
 
@@ -209,7 +208,7 @@ func (r *Runner) runJob(ctx context.Context, jobName string, cancel context.Canc
 			continue
 		}
 
-		r.executeJob(jobName, job)
+		r.executeJob(ctx, jobName, job)
 
 		r.mu.Lock()
 		r.running[jobName] = false
@@ -247,7 +246,7 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 }
 
 // executeJob runs a single job execution in a subprocess for environment isolation
-func (r *Runner) executeJob(jobName string, job *config.Job) {
+func (r *Runner) executeJob(ctx context.Context, jobName string, job *config.Job) {
 	startTime := time.Now()
 	r.Logger.Info("launching_subprocess", log.F("job", job.Name))
 
@@ -318,56 +317,67 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 		cmdArgs = append(cmdArgs, "--thinking-budget", fmt.Sprintf("%d", thinkingBudget))
 	}
 
-	// Run in subprocess for environment isolation
+	// Run in subprocess for environment isolation with context support
 	cmd := exec.Command(execPath, cmdArgs...)
 	cmd.Env = env
 	cmd.Dir = r.workspace
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 
 	r.Logger.Info("subprocess_started", log.F("job", job.Name), log.F("executable", execPath), log.F("dir", r.workspace))
 
-	output, err := cmd.CombinedOutput()
+	// Start the process
+	if err := cmd.Start(); err != nil {
+		r.Logger.Error("subprocess_start_failed", log.F("job", job.Name), log.F("error", err))
+		return
+	}
 
-	if err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			r.Logger.Error("subprocess_failed", log.F("job", job.Name), log.F("exit_code", exitErr.ExitCode()))
-		} else {
-			r.Logger.Error("subprocess_failed", log.F("job", job.Name), log.F("error", err))
-		}
+	// Wait for process with context cancellation support
+	done := make(chan error, 1)
+	go func() {
+		done <- cmd.Wait()
+	}()
+
+	var exitErr error
+	select {
+	case <-ctx.Done():
+		r.Logger.Info("job_cancelled", log.F("job", job.Name))
+		cmd.Process.Kill()
+		cmd.Wait()
+		return
+	case exitErr = <-done:
+		// Process completed
 	}
 
 	// Record job run
 	finishTime := time.Now()
 	exitCode := 0
 	success := true
-	if err != nil {
+	if exitErr != nil {
 		success = false
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
+		if ee, ok := exitErr.(*exec.ExitError); ok {
+			exitCode = ee.ExitCode()
 		}
+		r.Logger.Error("subprocess_failed", log.F("job", jobName), log.F("exit_code", exitCode))
 	}
 
 	// Save to history (truncate output to avoid huge files)
-	outputPreview := truncate(string(output), 500)
+	// Note: output goes to stdout/stderr directly, so we just record success/failure
 	jobRun := storage.JobRun{
 		ID:         uuid.New().String(),
 		JobName:    jobName,
 		StartedAt:  startTime,
 		FinishedAt: finishTime,
 		Success:    success,
-		Output:     outputPreview,
 		ExitCode:   exitCode,
 	}
 	if err := r.store.SaveJobRun(jobRun); err != nil {
 		r.Logger.Warn("failed_to_save_job_run", log.F("job", jobName), log.F("error", err))
 	}
 
-	if err != nil {
-		r.Logger.Error("subprocess_failed", log.F("job", jobName), log.F("exit_code", exitCode))
-		return
+	if success {
+		r.Logger.Info("job_complete", log.F("job", jobName))
 	}
-
-	r.Logger.Info("job_complete", log.F("job", jobName))
 }
 
 // truncate truncates a string to maxLen, adding ellipsis if truncated
