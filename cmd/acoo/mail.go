@@ -5,12 +5,18 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 
 	"github.com/nalanj/acoo/internal/mail"
+)
+
+const (
+	ioctlReadWinsize = 0x5411
 )
 
 var (
@@ -32,6 +38,7 @@ func buildMailCommands() *cobra.Command {
 		mailThreadsCmd(),
 		mailThreadCmd(),
 		mailAgentsCmd(),
+		mailTUICmd(),
 	)
 
 	return mailCmd
@@ -426,6 +433,38 @@ func mailAgentsCmd() *cobra.Command {
 			return nil
 		},
 	}
+}
+
+func mailTUICmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "tui",
+		Short: "Open mail TUI",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// Check if running as an agent (AGENT_NAME set)
+			if os.Getenv("AGENT_NAME") != "" {
+				return fmt.Errorf("tui cannot run when AGENT_NAME is set")
+			}
+
+			// Check if stdin is a terminal
+			if !isTerminal(os.Stdin.Fd()) {
+				return fmt.Errorf("tui requires a terminal (stdin is not a tty)")
+			}
+
+			return runMailTUI()
+		},
+	}
+}
+
+func isTerminal(fd uintptr) bool {
+	// Simple check using unix package
+	var ws struct {
+		Rows    uint16
+		Cols    uint16
+		Xpixel  uint16
+		Ypixel  uint16
+	}
+	retcode, _, _ := syscall.Syscall(syscall.SYS_IOCTL, fd, ioctlReadWinsize, uintptr(unsafe.Pointer(&ws)))
+	return retcode == 0
 }
 
 func editWithEditor(initial string) (string, error) {
