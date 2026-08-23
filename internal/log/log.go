@@ -39,6 +39,9 @@ const (
 	ColorBoldRed = "\033[1;31m"
 )
 
+// Global output lock for synchronized writes to stdout/stderr
+var outputMu sync.Mutex
+
 // isTerminal returns true if the writer is a terminal
 func isTerminal(w io.Writer) bool {
 	if f, ok := w.(*os.File); ok {
@@ -117,8 +120,9 @@ func colorForLevel(level string) string {
 
 // write formats and writes a log line.
 func (l *Logger) write(level, message string, fields ...Field) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
+	// Lock global output for synchronized writes
+	outputMu.Lock()
+	defer outputMu.Unlock()
 
 	timestamp := time.Now().Format(time.RFC3339)
 	scopeColor := colorForScope(l.scope)
