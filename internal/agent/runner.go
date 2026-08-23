@@ -281,6 +281,8 @@ func (r *Runner) executeJob(jobName string, job *config.Job) {
 	for k, v := range job.GetEnv() {
 		env = append(env, k+"="+v)
 	}
+	// Set AGENT_NAME so mail tools know who we are
+	env = append(env, "AGENT_NAME="+r.Agent.Name)
 
 	// Build full system prompt and write to file (avoids command line limits)
 	tools := Tools()
