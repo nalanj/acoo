@@ -3,15 +3,15 @@ package main
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textarea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/mattn/go-runewidth"
 
 	"github.com/nalanj/acoo/internal/mail"
 )
@@ -81,11 +81,9 @@ type model struct {
 	selectedID string
 
 	// Compose state
-	composeTo        string
-	composeSubject  string
-	composeBody     string
-	composeField    int    // 0=to, 1=subject, 2=body
-	composeCursor   int    // cursor position within current field
+	composeTo       textinput.Model
+	composeSubject  textinput.Model
+	composeBody     textarea.Model
 	composeError    string
 
 	quitting bool
@@ -103,12 +101,29 @@ func newModel() (*model, error) {
 		return nil, err
 	}
 
+	composeTo := textinput.New()
+	composeTo.Placeholder = "recipient"
+	composeTo.Focus()
+	composeTo.PromptStyle = titleStyle
+	composeTo.TextStyle = itemStyle
+
+	composeSubject := textinput.New()
+	composeSubject.Placeholder = "subject"
+	composeSubject.PromptStyle = titleStyle
+	composeSubject.TextStyle = itemStyle
+
+	composeBody := textarea.New()
+	composeBody.Placeholder = "message body..."
+
 	return &model{
-		cfg:        cfg,
-		store:      mail.NewStore(cfg.MessagesDir),
-		inboxMgr:   mail.NewInboxManager(cfg.MessagesDir),
-		archiveMgr: mail.NewArchiveManager(cfg.MessagesDir, cfg.MailRoot),
-		view:       viewInbox,
+		cfg:             cfg,
+		store:           mail.NewStore(cfg.MessagesDir),
+		inboxMgr:        mail.NewInboxManager(cfg.MessagesDir),
+		archiveMgr:      mail.NewArchiveManager(cfg.MessagesDir, cfg.MailRoot),
+		view:            viewInbox,
+		composeTo:       composeTo,
+		composeSubject:  composeSubject,
+		composeBody:     composeBody,
 	}, nil
 }
 
@@ -118,11 +133,32 @@ func (m *model) Init() tea.Cmd {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	// Handle compose mode keys before text inputs see them
+	if m.view == viewCompose {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			// Handle Tab, Enter, Ctrl+Enter, Esc, q BEFORE text inputs
+			if keyMsg.String() == "tab" || keyMsg.String() == "enter" ||
+				keyMsg.String() == "ctrl+enter" || keyMsg.String() == "ctrl+j" ||
+				keyMsg.String() == "esc" || keyMsg.String() == "q" {
+				return m.handleComposeKey(keyMsg)
+			}
+		}
+		// Update text inputs
+		m.composeTo, _ = m.composeTo.Update(msg)
+		m.composeSubject, _ = m.composeSubject.Update(msg)
+		m.composeBody, _ = m.composeBody.Update(msg)
+		return m, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport = viewport.New(msg.Width, msg.Height-3)
+		m.composeBody.SetWidth(msg.Width - 4)
+		m.composeBody.SetHeight(msg.Height - 15)
+		m.composeTo.Width = msg.Width - 10
+		m.composeSubject.Width = msg.Width - 12
 		// Load inbox now that we have dimensions
 		if m.view == viewInbox {
 			m.loadInbox()
@@ -272,92 +308,30 @@ func (m *model) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleComposeKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Handle character input for text fields
-	if len(msg.Runes) > 0 && m.composeField < 2 {
-		r := msg.Runes[0]
-		switch {
-		case r == '\n':
-			// Enter moves to next field
-			if m.composeField < 2 {
-				m.composeField++
-				m.composeCursor = 0
-			}
-		case r == '\b':
-			// Backspace
-			field := m.getComposeField()
-			if m.composeCursor > 0 && len(field) > 0 {
-				newField := field[:m.composeCursor-1] + field[m.composeCursor:]
-				m.setComposeField(newField)
-				m.composeCursor--
-			}
-		default:
-			// Insert character at cursor
-			field := m.getComposeField()
-			if m.composeCursor >= len(field) {
-				field += string(r)
-			} else {
-				field = field[:m.composeCursor] + string(r) + field[m.composeCursor:]
-			}
-			m.setComposeField(field)
-			m.composeCursor++
-		}
-		return m, nil
-	}
-
 	switch msg.String() {
 	case "tab":
-		m.composeField = (m.composeField + 1) % 3
-		m.composeCursor = len(m.getComposeField())
-	case "enter":
-		if m.composeField < 2 {
-			m.composeField++
-			m.composeCursor = len(m.getComposeField())
+		// Cycle focus between fields
+		if m.composeTo.Focused() {
+			m.composeTo.Blur()
+			m.composeSubject.Focus()
+		} else if m.composeSubject.Focused() {
+			m.composeSubject.Blur()
+			m.composeBody.Focus()
+		} else {
+			m.composeBody.Blur()
+			m.composeTo.Focus()
 		}
-	case "ctrl+r":
-		body, err := m.editInEditor(m.composeBody)
-		if err == nil {
-			m.composeBody = body
-		}
-	case "ctrl+enter", "ctrl+s":
+	case "enter", "ctrl+enter", "ctrl+j":
+		// Send the message
 		return m, m.sendCompose
-	case "esc":
+	case "esc", "q":
 		m.view = viewInbox
-	case "left":
-		if m.composeCursor > 0 {
-			m.composeCursor--
-		}
-	case "right":
-		if m.composeCursor < len(m.getComposeField()) {
-			m.composeCursor++
-		}
-	case "home", "ctrl+a":
-		m.composeCursor = 0
-	case "end", "ctrl+e":
-		m.composeCursor = len(m.getComposeField())
+		m.composeTo.Blur()
+		m.composeSubject.Blur()
+		m.composeBody.Blur()
+		m.composeTo.Focus()
 	}
 	return m, nil
-}
-
-func (m *model) getComposeField() string {
-	switch m.composeField {
-	case 0:
-		return m.composeTo
-	case 1:
-		return m.composeSubject
-	default:
-		return m.composeBody
-	}
-}
-
-func (m *model) setComposeField(value string) {
-	switch m.composeField {
-	case 0:
-		m.composeTo = value
-	case 1:
-		m.composeSubject = value
-	default:
-		m.composeBody = value
-	}
 }
 
 func (m *model) loadInbox() {
@@ -533,12 +507,11 @@ func (m *model) newStyledDelegate() list.DefaultDelegate {
 }
 
 func (m *model) startCompose(to, subject, body string) {
-	m.composeTo = to
-	m.composeSubject = subject
-	m.composeBody = body
-	m.composeField = 0
-	m.composeCursor = len(to)
+	m.composeTo.SetValue(to)
+	m.composeSubject.SetValue(subject)
+	m.composeBody.SetValue(body)
 	m.composeError = ""
+	m.composeTo.Focus()
 	m.view = viewCompose
 }
 
@@ -558,7 +531,11 @@ func (m *model) startReply(id string) {
 }
 
 func (m *model) sendCompose() tea.Msg {
-	if m.composeTo == "" || m.composeSubject == "" || m.composeBody == "" {
+	to := m.composeTo.Value()
+	subject := m.composeSubject.Value()
+	body := m.composeBody.Value()
+
+	if to == "" || subject == "" || body == "" {
 		m.composeError = "All fields required"
 		return nil
 	}
@@ -566,10 +543,10 @@ func (m *model) sendCompose() tea.Msg {
 	msg := &mail.Message{
 		ID:        mail.GenerateID(),
 		From:      m.cfg.AgentName(),
-		To:        []string{m.composeTo},
-		Subject:   m.composeSubject,
+		To:        []string{to},
+		Subject:   subject,
 		Timestamp: time.Now().UTC(),
-		Body:      m.composeBody,
+		Body:      body,
 		Thread:    mail.GenerateID(),
 	}
 
@@ -590,48 +567,6 @@ func (m *model) sendCompose() tea.Msg {
 
 func (m *model) archiveMessage(id string) {
 	m.archiveMgr.Archive(m.cfg.AgentName(), id)
-}
-
-func (m *model) editInEditor(content string) (string, error) {
-	editor := os.Getenv("EDITOR")
-	if editor == "" {
-		editor = "vi"
-	}
-
-	tmpfile, err := os.CreateTemp("", "acoo-compose-*.md")
-	if err != nil {
-		return "", err
-	}
-	defer os.Remove(tmpfile.Name())
-	defer tmpfile.Close()
-
-	if _, err := tmpfile.WriteString(content); err != nil {
-		return "", err
-	}
-	tmpfile.Close()
-
-	// Exit alternate screen before running editor
-	fmt.Print("\033[?1049l")
-
-	execCmd := exec.Command(editor, tmpfile.Name())
-	execCmd.Stdin = os.Stdin
-	execCmd.Stdout = os.Stdout
-	execCmd.Stderr = os.Stderr
-	if err := execCmd.Run(); err != nil {
-		// Re-enter alternate screen on error
-		fmt.Print("\033[?1049h")
-		return "", err
-	}
-
-	// Re-enter alternate screen
-	fmt.Print("\033[?1049h")
-
-	data, err := os.ReadFile(tmpfile.Name())
-	if err != nil {
-		return "", err
-	}
-
-	return string(data), nil
 }
 
 func (m *model) View() string {
@@ -706,51 +641,29 @@ func (m *model) renderMessage(b *strings.Builder) {
 func (m *model) renderCompose(b *strings.Builder) {
 	b.WriteString(titleStyle.Render("New Message"))
 	b.WriteString("\n")
-	b.WriteString(helpStyle.Render("Fill in fields below. Type to edit. Tab=next field.\n"))
-	b.WriteString(helpStyle.Render("─────────────────────────────────────────────────────\n"))
+	b.WriteString(helpStyle.Render("Tab=next field | Enter/Ctrl+J=send | q=cancel\n"))
+	b.WriteString(borderStyle.Render(strings.Repeat("─", m.width)))
+	b.WriteString("\n")
 
-	fields := []string{m.composeTo, m.composeSubject, m.composeBody}
-	labels := []string{"To:", "Subject:", "Body:"}
-	placeholders := []string{"[recipient]", "[subject]", "[body - Ctrl+R to edit]"}
+	// To field
+	b.WriteString(titleStyle.Render("To: "))
+	b.WriteString(m.composeTo.View())
+	b.WriteString("\n")
 
-	for i := range fields {
-		label := labels[i]
-		value := fields[i]
-		placeholder := placeholders[i]
-		isActive := i == m.composeField
+	// Subject field
+	b.WriteString(titleStyle.Render("Subject: "))
+	b.WriteString(m.composeSubject.View())
+	b.WriteString("\n")
 
-		prefix := "  "
-		if isActive {
-			prefix = "▸ "
-		}
-
-		if isActive {
-			if value == "" {
-				b.WriteString(titleStyle.Render(prefix))
-				b.WriteString(itemStyle.Render(fmt.Sprintf("%-10s%s", label, helpStyle.Render(placeholder))))
-			} else {
-				b.WriteString(titleStyle.Render(prefix))
-				b.WriteString(itemStyle.Render(fmt.Sprintf("%-10s%s", label, value)))
-			}
-		} else {
-			if value == "" {
-				b.WriteString(helpStyle.Render(fmt.Sprintf("%s%-10s%s", prefix, label, placeholder)))
-			} else {
-				b.WriteString(helpStyle.Render(fmt.Sprintf("%s%-10s", prefix, label)))
-				b.WriteString(itemStyle.Render(value))
-			}
-		}
-		b.WriteString("\n")
-	}
-
-	b.WriteString(helpStyle.Render("─────────────────────────────────────────────────────\n"))
+	// Body field
+	b.WriteString(titleStyle.Render("Body:\n"))
+	b.WriteString(m.composeBody.View())
+	b.WriteString("\n")
 
 	if m.composeError != "" {
 		b.WriteString(statusErrStyle.Render("Error: " + m.composeError))
 		b.WriteString("\n")
 	}
-
-	b.WriteString(helpStyle.Render("\nCtrl+R=edit body in $EDITOR | Ctrl+S=send | q=cancel\n"))
 }
 
 func (m *model) renderHelp(b *strings.Builder) {
@@ -821,9 +734,4 @@ func runMailTUI() error {
 	}
 
 	return nil
-}
-
-func init() {
-	// Ensure runewidth uses correct terminal width
-	runewidth.DefaultCondition.EastAsianWidth = false
 }
