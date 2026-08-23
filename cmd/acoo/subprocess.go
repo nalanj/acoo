@@ -24,6 +24,27 @@ import (
 
 const maxCompactionRetries = 1 // Max compaction attempts before giving up
 
+// synchronized stdout writer for subprocess
+var stdoutMu sync.Mutex
+
+func safePrint(a ...any) {
+	stdoutMu.Lock()
+	defer stdoutMu.Unlock()
+	fmt.Print(a...)
+}
+
+func safePrintln(a ...any) {
+	stdoutMu.Lock()
+	defer stdoutMu.Unlock()
+	fmt.Println(a...)
+}
+
+func safePrintf(format string, a ...any) {
+	stdoutMu.Lock()
+	defer stdoutMu.Unlock()
+	fmt.Printf(format, a...)
+}
+
 // jsonlog is a JSON logger for subprocess output to stdout
 var jsonlog = &jsonLogger{}
 
@@ -155,27 +176,27 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 			Prompt:   currentPrompt,
 			Messages: messages,
 			OnTextDelta: func(id, text string) error {
-				fmt.Print(text)
+				safePrint(text)
 				textBuilder.WriteString(text)
 				return nil
 			},
 			OnReasoningDelta: func(id, text string) error {
 				if !inThinking {
-					fmt.Print("\n[thinking] ")
+					safePrint("\n[thinking] ")
 					inThinking = true
 				}
-				fmt.Print(text)
+				safePrint(text)
 				return nil
 			},
 			OnReasoningEnd: func(id string, reasoning fantasy.ReasoningContent) error {
 				if inThinking {
-					fmt.Println(" [/thinking]")
+					safePrintln(" [/thinking]")
 					inThinking = false
 				}
 				return nil
 			},
 			OnToolCall: func(call fantasy.ToolCallContent) error {
-				fmt.Printf("\n[tool] %s(%s)\n", call.ToolName, call.Input)
+				safePrintf("\n[tool] %s(%s)\n", call.ToolName, call.Input)
 				return nil
 			},
 			OnToolResult: func(result fantasy.ToolResultContent) error {
@@ -183,7 +204,7 @@ func runAgentSubprocess(cmd *cobra.Command, args []string) error {
 				if len(resultStr) > 500 {
 					resultStr = resultStr[:500] + "..."
 				}
-				fmt.Printf("[result] %s\n", resultStr)
+				safePrintf("[result] %s\n", resultStr)
 				return nil
 			},
 			OnStepFinish: func(step fantasy.StepResult) error {
