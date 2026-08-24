@@ -577,7 +577,8 @@ func (m *model) sendCompose() tea.Msg {
 
 	m.view = viewInbox
 	m.loadInbox()
-	return nil
+	// Return a tick to force re-render
+	return tickMsg{time.Now()}
 }
 
 func (m *model) archiveMessage(id string) {

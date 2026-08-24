@@ -250,7 +250,6 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 func (r *Runner) executeJob(ctx context.Context, jobName string, job *config.Job) {
 	startTime := time.Now()
 	if r.Logger == nil {
-		fmt.Printf("executeJob: Logger is nil\n")
 		return
 	}
 	// Ensure workspace exists
