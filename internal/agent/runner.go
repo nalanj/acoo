@@ -249,7 +249,9 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 // executeJob runs a single job execution in a subprocess for environment isolation
 func (r *Runner) executeJob(ctx context.Context, jobName string, job *config.Job) {
 	startTime := time.Now()
-	r.Logger.Info("launching_subprocess", log.F("job", job.Name))
+	if r.Logger != nil {
+		r.Logger.Info("launching_subprocess", log.F("job", jobName))
+	}
 
 	// Ensure workspace exists
 	if err := os.MkdirAll(r.workspace, 0755); err != nil {
