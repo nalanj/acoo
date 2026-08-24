@@ -211,9 +211,9 @@ func MailInboxTool() fantasy.AgentTool {
 // MailSendTool returns a tool for sending messages
 func MailSendTool() fantasy.AgentTool {
 	type MailSendInput struct {
-		Recipient string `json:"recipient" description:"The recipient to send to"`
-		Subject   string `json:"subject" description:"The message subject"`
-		Body      string `json:"body" description:"The message body"`
+		Recipients []string `json:"recipients" description:"The recipients to send to (array)"`
+		Subject   string   `json:"subject" description:"The message subject"`
+		Body      string   `json:"body" description:"The message body"`
 	}
 
 	fn := func(ctx context.Context, input MailSendInput, call fantasy.ToolCall) (fantasy.ToolResponse, error) {
@@ -225,7 +225,7 @@ func MailSendTool() fantasy.AgentTool {
 		msg := &mail.Message{
 			ID:        mail.GenerateID(),
 			From:      cfg.AgentName(),
-			To:        []string{input.Recipient},
+			To:        input.Recipients,
 			Subject:   input.Subject,
 			Timestamp: time.Now().UTC(),
 			Body:      input.Body,

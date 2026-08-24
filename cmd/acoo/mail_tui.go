@@ -540,6 +540,12 @@ func (m *model) sendCompose() tea.Msg {
 		return nil
 	}
 
+	// Parse comma-separated recipients
+	recipients := strings.Split(to, ",")
+	for i := range recipients {
+		recipients[i] = strings.TrimSpace(recipients[i])
+	}
+
 	// Use existing thread ID if replying, otherwise generate new thread
 	threadID := m.composeThread
 	if threadID == "" {
@@ -549,7 +555,7 @@ func (m *model) sendCompose() tea.Msg {
 	msg := &mail.Message{
 		ID:        mail.GenerateID(),
 		From:      m.cfg.AgentName(),
-		To:        []string{to},
+		To:        recipients,
 		Subject:   subject,
 		Timestamp: time.Now().UTC(),
 		Body:      body,
