@@ -249,11 +249,12 @@ func (r *Runner) checkPreconditions(job *config.Job) bool {
 // executeJob runs a single job execution in a subprocess for environment isolation
 func (r *Runner) executeJob(ctx context.Context, jobName string, job *config.Job) {
 	startTime := time.Now()
-	if r.Logger != nil {
-		r.Logger.Info("launching_subprocess", log.F("job", jobName))
+	if r.Logger == nil {
+		fmt.Printf("executeJob: Logger is nil\n")
+		return
 	}
-
 	// Ensure workspace exists
+	r.Logger.Info("launching_subprocess", log.F("job", job.Name))
 	if err := os.MkdirAll(r.workspace, 0755); err != nil {
 		r.Logger.Error("create_workspace_failed", log.F("job", job.Name), log.F("workspace", r.workspace), log.F("error", err))
 		return
