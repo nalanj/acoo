@@ -759,7 +759,17 @@ func (m *model) renderCompose(b *strings.Builder) {
 }
 
 func (m *model) renderGoto(b *strings.Builder) {
-	// Build modal using lipgloss for styling
+	// Build base content (list) as background layer
+	var base strings.Builder
+	if m.prevView == viewInbox {
+		m.renderInbox(&base)
+	} else {
+		m.renderArchive(&base)
+	}
+	baseContent := base.String()
+	baseLines := strings.Split(baseContent, "\n")
+
+	// Build modal as foreground layer
 	style := modalStyle.
 		Width(m.width - 10).
 		Align(lipgloss.Center)
@@ -770,11 +780,35 @@ func (m *model) renderGoto(b *strings.Builder) {
 		itemStyle.Render("  a  Archive"),
 		dimStyle.Render("  q  Cancel"),
 	}, "\n"))
+	modalLines := strings.Split(modalContent, "\n")
 
-	// Use lipgloss.Place to center modal in the content area
-	// This creates a layered effect with whitespace fill
-	contentHeight := m.height - 4 // minus header and footer
-	b.WriteString(lipgloss.Place(m.width, contentHeight, lipgloss.Center, lipgloss.Center, modalContent))
+	// Build viewport height
+	viewportHeight := m.height - 4 // minus header and footer
+
+	// Calculate where to insert modal (centered)
+	modalStart := (viewportHeight - len(modalLines)) / 2
+	if modalStart < 0 {
+		modalStart = 0
+	}
+
+	// Compose: iterate through viewport, inserting modal lines at center
+	for i := 0; i < viewportHeight; i++ {
+		if i >= len(baseLines) {
+			break
+		}
+
+		line := baseLines[i]
+
+		// Check if this line should have modal content overlaid
+		modalIdx := i - modalStart
+		if modalIdx >= 0 && modalIdx < len(modalLines) {
+			// This is a modal line - render it with base
+			line = modalLines[modalIdx]
+		}
+
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
 }
 
 func (m *model) renderHelp(b *strings.Builder) {
