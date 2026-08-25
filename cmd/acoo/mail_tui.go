@@ -759,16 +759,34 @@ func (m *model) renderCompose(b *strings.Builder) {
 }
 
 func (m *model) renderGoto(b *strings.Builder) {
-	// Just show the modal, no list behind
-	modalContent := modalStyle.
+	// Build modal with lipgloss positioning
+	modalStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7aa2f7")).
+		Background(lipgloss.Color("#1a1b26")).
+		Foreground(lipgloss.Color("#c0caf5")).
+		Padding(1, 2).
 		Width(m.width - 10).
-		Align(lipgloss.Center).
-		Render(
-			titleStyle.Render("Go to:") + "\n" +
-			itemStyle.Render("  i  Inbox") + "\n" +
-			itemStyle.Render("  a  Archive") + "\n" +
-			dimStyle.Render("  q  Cancel"),
-		)
+		Align(lipgloss.Center)
+
+	modalContent := modalStyle.Render(strings.Join([]string{
+		titleStyle.Render("Go to:"),
+		itemStyle.Render("  i  Inbox"),
+		itemStyle.Render("  a  Archive"),
+		dimStyle.Render("  q  Cancel"),
+	}, "\n"))
+
+	// Render the list first
+	if m.prevView == viewInbox {
+		m.renderInbox(b)
+	} else {
+		m.renderArchive(b)
+	}
+
+	// Overlay modal centered
+	b.WriteString(fmt.Sprintf("\033[%dA", m.height/2-4)) // Move cursor up
+	b.WriteString("\r")                               // Start of line
+	b.WriteString(fmt.Sprintf("\033[%dC", m.width/2-20)) // Move right to center
 	b.WriteString(modalContent)
 }
 
