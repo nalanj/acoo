@@ -179,13 +179,29 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tickMsg:
-		// Refresh lists periodically
+		// Refresh lists periodically but preserve selection
+		selectedID := ""
+		if m.list.SelectedItem() != nil {
+			selectedID = m.list.SelectedItem().(MailItem).id
+		}
+
 		switch m.view {
 		case viewInbox:
 			m.loadInbox()
 		case viewArchive:
 			m.loadArchive()
 		}
+
+		// Restore selection if the item still exists
+		if selectedID != "" {
+			for i, msg := range m.messages {
+				if msg.ID == selectedID {
+					m.list.Select(i)
+					break
+				}
+			}
+		}
+
 		// Continue ticking
 		return m, tea.Tick(refreshInterval, func(t time.Time) tea.Msg {
 			return tickMsg{t}
