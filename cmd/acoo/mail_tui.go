@@ -769,23 +769,25 @@ func (m *model) renderGoto(b *strings.Builder) {
 	baseContent := base.String()
 	baseLines := strings.Split(baseContent, "\n")
 
-	// Build modal as foreground layer
-	style := modalStyle.
-		Width(m.width - 10).
-		Align(lipgloss.Center)
+	// Build modal content - left aligned with 1 char padding
+	modalText := "Go to:\n  i  Inbox\n  a  Archive\n  q  Cancel"
 
-	modalContent := style.Render(strings.Join([]string{
-		titleStyle.Render("Go to:"),
-		itemStyle.Render("  i  Inbox"),
-		itemStyle.Render("  a  Archive"),
-		dimStyle.Render("  q  Cancel"),
-	}, "\n"))
+	style := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#7aa2f7")).
+		Background(lipgloss.Color("#1a1b26")).
+		Foreground(lipgloss.Color("#c0caf5")).
+		Padding(1, 1).
+		Width(m.width - 10).
+		Align(lipgloss.Left)
+
+	modalContent := style.Render(modalText)
 	modalLines := strings.Split(modalContent, "\n")
 
 	// Build viewport height
 	viewportHeight := m.height - 4 // minus header and footer
 
-	// Calculate where to insert modal (centered)
+	// Calculate where to center modal (vertically)
 	modalStart := (viewportHeight - len(modalLines)) / 2
 	if modalStart < 0 {
 		modalStart = 0
@@ -802,7 +804,6 @@ func (m *model) renderGoto(b *strings.Builder) {
 		// Check if this line should have modal content overlaid
 		modalIdx := i - modalStart
 		if modalIdx >= 0 && modalIdx < len(modalLines) {
-			// This is a modal line - render it with base
 			line = modalLines[modalIdx]
 		}
 
@@ -858,7 +859,7 @@ func (m *model) renderFooter(b *strings.Builder) {
 	case viewHelp:
 		footer = "q:back"
 	case viewGoto:
-		footer = "i:Inbox a:Archive | q:Cancel"
+		footer = "g:go-to | j/k:up/down a:archive c:compose q:quit ?:help"
 	}
 
 	b.WriteString(helpStyle.Render(footer))
