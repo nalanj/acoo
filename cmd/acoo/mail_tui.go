@@ -769,7 +769,7 @@ func (m *model) renderGoto(b *strings.Builder) {
 	baseContent := base.String()
 	baseLines := strings.Split(baseContent, "\n")
 
-	// Build modal content - left aligned with 1 char padding
+	// Build modal content
 	modalText := "Go to:\n  i  Inbox\n  a  Archive\n  q  Cancel"
 
 	style := lipgloss.NewStyle().
@@ -783,6 +783,16 @@ func (m *model) renderGoto(b *strings.Builder) {
 
 	modalContent := style.Render(modalText)
 	modalLines := strings.Split(modalContent, "\n")
+
+	// Calculate horizontal centering
+	modalWidth := m.width - 10
+	horizPadding := (m.width - modalWidth) / 2
+	paddingStr := strings.Repeat(" ", horizPadding)
+
+	// Pad each modal line to center horizontally
+	for i := range modalLines {
+		modalLines[i] = paddingStr + modalLines[i]
+	}
 
 	// Build viewport height
 	viewportHeight := m.height - 4 // minus header and footer
