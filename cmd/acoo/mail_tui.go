@@ -51,8 +51,9 @@ var (
 	modalStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#7aa2f7")).
-			Padding(1, 2).
-			Foreground(lipgloss.Color("#c0caf5"))
+			Background(lipgloss.Color("#1a1b26")).
+			Foreground(lipgloss.Color("#c0caf5")).
+			Padding(1, 2)
 )
 
 // View constants
@@ -758,6 +759,17 @@ func (m *model) renderCompose(b *strings.Builder) {
 }
 
 func (m *model) renderGoto(b *strings.Builder) {
+	// Build modal box
+	modalContent := modalStyle.
+		Width(m.width - 10).
+		Align(lipgloss.Center).
+		Render(
+			titleStyle.Render("Go to:") + "\n" +
+			itemStyle.Render("  i  Inbox") + "\n" +
+			itemStyle.Render("  a  Archive") + "\n" +
+			dimStyle.Render("  q  Cancel"),
+		)
+
 	// Render the list we're coming from
 	if m.prevView == viewInbox {
 		m.renderInbox(b)
@@ -765,15 +777,12 @@ func (m *model) renderGoto(b *strings.Builder) {
 		m.renderArchive(b)
 	}
 
-	// Render modal box
-	modalContent := modalStyle.Render(
-		titleStyle.Render("Go to:") + "\n" +
-		itemStyle.Render("  i  Inbox") + "\n" +
-		itemStyle.Render("  a  Archive") + "\n" +
-		dimStyle.Render("  q  Cancel"),
-	)
-
-	b.WriteString("\n\n")
+	// Position modal in center by moving cursor up
+	// Calculate how many lines up to go to center the modal (modal is ~5 lines)
+	upCount := (m.height - 5) / 2
+	b.WriteString(fmt.Sprintf("\033[%dA", upCount))
+	b.WriteString("\r")
+	b.WriteString(fmt.Sprintf("\033[2C")) // Move right to center roughly
 	b.WriteString(modalContent)
 }
 
