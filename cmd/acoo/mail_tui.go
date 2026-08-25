@@ -759,14 +759,7 @@ func (m *model) renderCompose(b *strings.Builder) {
 }
 
 func (m *model) renderGoto(b *strings.Builder) {
-	// Render base content
-	if m.prevView == viewInbox {
-		m.renderInbox(b)
-	} else {
-		m.renderArchive(b)
-	}
-
-	// Build modal style with dynamic width and center alignment
+	// Build modal content
 	style := modalStyle.
 		Width(m.width - 10).
 		Align(lipgloss.Center)
@@ -778,8 +771,8 @@ func (m *model) renderGoto(b *strings.Builder) {
 		dimStyle.Render("  q  Cancel"),
 	}, "\n"))
 
-	// Append modal
-	b.WriteString(modalContent)
+	// Use lipgloss.Place to center modal in viewport with whitespace fill
+	b.WriteString(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modalContent))
 }
 
 func (m *model) renderHelp(b *strings.Builder) {
