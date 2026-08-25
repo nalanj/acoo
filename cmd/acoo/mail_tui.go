@@ -47,6 +47,12 @@ var (
 
 	statusErrStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#f7768e"))
+
+	modalStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#7aa2f7")).
+			Padding(1, 2).
+			Foreground(lipgloss.Color("#c0caf5"))
 )
 
 // View constants
@@ -759,11 +765,16 @@ func (m *model) renderGoto(b *strings.Builder) {
 		m.renderArchive(b)
 	}
 
-	// Overlay the modal
-	b.WriteString(titleStyle.Render("\n  Go to:\n"))
-	b.WriteString(titleStyle.Render("    [i] Inbox\n"))
-	b.WriteString(titleStyle.Render("    [a] Archive\n"))
-	b.WriteString(titleStyle.Render("\n  [q] Cancel\n"))
+	// Render modal box
+	modalContent := modalStyle.Render(
+		titleStyle.Render("Go to:") + "\n" +
+		itemStyle.Render("  i  Inbox") + "\n" +
+		itemStyle.Render("  a  Archive") + "\n" +
+		dimStyle.Render("  q  Cancel"),
+	)
+
+	b.WriteString("\n\n")
+	b.WriteString(modalContent)
 }
 
 func (m *model) renderHelp(b *strings.Builder) {
