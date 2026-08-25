@@ -759,7 +759,7 @@ func (m *model) renderCompose(b *strings.Builder) {
 }
 
 func (m *model) renderGoto(b *strings.Builder) {
-	// Build modal content
+	// Build modal using lipgloss for styling
 	style := modalStyle.
 		Width(m.width - 10).
 		Align(lipgloss.Center)
@@ -771,8 +771,10 @@ func (m *model) renderGoto(b *strings.Builder) {
 		dimStyle.Render("  q  Cancel"),
 	}, "\n"))
 
-	// Use lipgloss.Place to center modal in viewport with whitespace fill
-	b.WriteString(lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, modalContent))
+	// Use lipgloss.Place to center modal in the content area
+	// This creates a layered effect with whitespace fill
+	contentHeight := m.height - 4 // minus header and footer
+	b.WriteString(lipgloss.Place(m.width, contentHeight, lipgloss.Center, lipgloss.Center, modalContent))
 }
 
 func (m *model) renderHelp(b *strings.Builder) {
