@@ -266,6 +266,9 @@ func (m *model) handleInboxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		m.view = viewArchive
 		m.loadArchive()
+	case "i", "u":
+		// Stay in inbox (refresh)
+		m.loadInbox()
 	case "c":
 		m.startCompose("", "", "", "", "")
 	case "q", "ctrl+c":
@@ -300,6 +303,10 @@ func (m *model) handleArchiveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.loadArchive()
 		}
 	case "r":
+		// Stay in archive (refresh)
+		m.loadArchive()
+	case "i", "u":
+		// Go to inbox
 		m.view = viewInbox
 		m.loadInbox()
 	case "c":
@@ -722,10 +729,10 @@ func (m *model) renderCompose(b *strings.Builder) {
 
 func (m *model) renderHelp(b *strings.Builder) {
 	helpText := `
-Views:
+Views (from inbox):
   i         Inbox
-  a         Archive
-  t         Threads
+  u         Unread (same as inbox)
+  r         Archive
   c         Compose
   ?         Toggle this help
 
@@ -735,8 +742,7 @@ List navigation:
 
 List actions:
   Enter     View message
-  d         Archive selected
-  r         Reply to selected
+  a         Archive selected
 
 Message view:
   r         Reply
@@ -759,9 +765,9 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "r:archive c:compose | j/k:up/down enter:view a:archive q:quit ?:help"
+		footer = "i:inbox u:unread r:archive | j/k:up/down enter:view a:archive c:compose q:quit ?:help"
 	case viewArchive:
-		footer = "r:inbox c:compose | j/k:up/down enter:view a:archive q:quit ?:help"
+		footer = "i:inbox u:unread | j/k:up/down enter:view a:archive c:compose q:quit ?:help"
 	case viewMessage:
 		footer = "r:reply a:archive | q:back ?:help"
 	case viewCompose:
