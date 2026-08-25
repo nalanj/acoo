@@ -203,65 +203,28 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Global keys work in any view
-	switch msg.String() {
-	case "q", "ctrl+c":
-		if m.view == viewMessage || m.view == viewCompose {
-			m.view = viewInbox
-			return m, nil
-		}
-		return m, tea.Quit
-
-	case "?":
-		if m.view == viewHelp {
-			m.view = viewInbox
-		} else {
-			m.view = viewHelp
-		}
-		return m, nil
-
-	case "i", "u":
-		if m.view != viewCompose {
-			m.view = viewInbox
-			m.loadInbox()
-		}
-		return m, nil
-
-	case "r":
-		if m.view == viewMessage {
-			// Archive the current message
-			m.archiveMessage(m.selectedID)
-			m.view = viewInbox
-			m.loadInbox()
-		} else if m.view != viewCompose {
-			m.view = viewArchive
-			m.loadArchive()
-		}
-		return m, nil
-
-	case "c":
-		if m.view != viewCompose {
-			m.startCompose("", "", "", "", "")
-		}
-		return m, nil
-	}
-
 	// View-specific keys
 	switch m.view {
-	case viewInbox, viewArchive:
-		return m.handleListKey(msg)
+	case viewInbox:
+		return m.handleInboxKey(msg)
+
+	case viewArchive:
+		return m.handleArchiveKey(msg)
 
 	case viewMessage:
 		return m.handleMessageKey(msg)
 
 	case viewCompose:
 		return m.handleComposeKey(msg)
+
+	case viewHelp:
+		return m.handleHelpKey(msg)
 	}
 
 	return m, nil
 }
 
-func (m *model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *model) handleInboxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "j", "down":
 		m.list.CursorDown()
@@ -278,23 +241,65 @@ func (m *model) handleListKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.loadMessage(item.id)
 			m.view = viewMessage
 		}
-	case "d":
+	case "a", "d":
 		if m.list.SelectedItem() != nil {
 			item := m.list.SelectedItem().(MailItem)
 			m.archiveMessage(item.id)
 			m.loadInbox()
 		}
-	case "a":
+	case "r":
+		m.view = viewArchive
+		m.loadArchive()
+	case "c":
+		m.startCompose("", "", "", "", "")
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "?":
+		m.view = viewHelp
+	}
+	return m, nil
+}
+
+func (m *model) handleArchiveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "j", "down":
+		m.list.CursorDown()
+	case "k", "up":
+		m.list.CursorUp()
+	case "g":
+		m.list.GoToStart()
+	case "G":
+		m.list.GoToEnd()
+	case "enter":
+		if m.list.SelectedItem() != nil {
+			item := m.list.SelectedItem().(MailItem)
+			m.selectedID = item.id
+			m.loadMessage(item.id)
+			m.view = viewMessage
+		}
+	case "a", "d":
 		if m.list.SelectedItem() != nil {
 			item := m.list.SelectedItem().(MailItem)
 			m.archiveMessage(item.id)
-			// Reload current view
-			if m.view == viewArchive {
-				m.loadArchive()
-			} else {
-				m.loadInbox()
-			}
+			m.loadArchive()
 		}
+	case "r":
+		m.view = viewInbox
+		m.loadInbox()
+	case "c":
+		m.startCompose("", "", "", "", "")
+	case "q", "ctrl+c":
+		return m, tea.Quit
+	case "?":
+		m.view = viewHelp
+	}
+	return m, nil
+}
+
+func (m *model) handleHelpKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "?", "ctrl+c":
+		m.view = viewInbox
 	}
 	return m, nil
 }
@@ -303,8 +308,14 @@ func (m *model) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "r":
 		m.startReply(m.selectedID)
+	case "a":
+		m.archiveMessage(m.selectedID)
+		m.view = viewInbox
+		m.loadInbox()
 	case "q":
 		m.view = viewInbox
+	case "?":
+		m.view = viewHelp
 	}
 	return m, nil
 }
@@ -732,11 +743,11 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "i:inbox u:unread r:archive | j/k:up/down a:archive c:compose q:quit ?:help"
+		footer = "r:archive c:compose | j/k:up/down enter:view a:archive q:quit ?:help"
 	case viewArchive:
-		footer = "i:inbox u:unread r:archive | j/k:up/down a:archive c:compose q:quit"
+		footer = "r:inbox c:compose | j/k:up/down enter:view a:archive q:quit ?:help"
 	case viewMessage:
-		footer = "a:archive | q:back"
+		footer = "r:reply a:archive | q:back ?:help"
 	case viewCompose:
 		footer = "Tab:field Enter:newline Ctrl+J:send | q:cancel"
 	case viewHelp:
