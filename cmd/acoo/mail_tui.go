@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/reflow/wrap"
 
 	"github.com/nalanj/acoo/internal/mail"
 )
@@ -479,7 +480,7 @@ func (m *model) updateViewportForThread(thread *mail.Thread) {
 			b.WriteString("\n\n")
 		}
 		b.WriteString(fmt.Sprintf("%s %s | %s\n", statusOKStyle.Render("▎"), msg.From, msg.Timestamp.Format("2006-01-02 15:04")))
-		b.WriteString(msg.Body)
+		b.WriteString(wrap.String(msg.Body, m.width-4))
 	}
 
 	m.viewport.SetContent(b.String())
