@@ -56,6 +56,7 @@ const (
 	viewMessage  = "message"
 	viewCompose  = "compose"
 	viewHelp     = "help"
+	viewGoto     = "goto"
 )
 
 const refreshInterval = 5 * time.Second
@@ -84,6 +85,7 @@ type model struct {
 	messages   []*mail.Message
 	selectedID string
 	refreshTick int // Counter to trigger list refresh
+	prevView    string // Previous view, used when canceling from goto modal
 
 	// Compose state
 	composeTo       textinput.Model
@@ -235,6 +237,9 @@ func (m *model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case viewHelp:
 		return m.handleHelpKey(msg)
+
+	case viewGoto:
+		return m.handleGotoKey(msg)
 	}
 
 	return m, nil
@@ -247,7 +252,8 @@ func (m *model) handleInboxKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		m.list.CursorUp()
 	case "g":
-		m.list.GoToStart()
+		m.prevView = viewInbox
+		m.view = viewGoto
 	case "G":
 		m.list.GoToEnd()
 	case "enter":
@@ -286,7 +292,8 @@ func (m *model) handleArchiveKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "k", "up":
 		m.list.CursorUp()
 	case "g":
-		m.list.GoToStart()
+		m.prevView = viewArchive
+		m.view = viewGoto
 	case "G":
 		m.list.GoToEnd()
 	case "enter":
@@ -339,6 +346,21 @@ func (m *model) handleMessageKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.view = viewInbox
 	case "?":
 		m.view = viewHelp
+	}
+	return m, nil
+}
+
+func (m *model) handleGotoKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "i", "u":
+		m.view = viewInbox
+		m.loadInbox()
+	case "a":
+		m.view = viewArchive
+		m.loadArchive()
+	case "q", "esc", "ctrl+c":
+		// Cancel, go back to previous view
+		m.view = m.prevView
 	}
 	return m, nil
 }
@@ -642,6 +664,8 @@ func (m *model) View() string {
 		m.renderCompose(&b)
 	case viewHelp:
 		m.renderHelp(&b)
+	case viewGoto:
+		m.renderGoto(&b)
 	}
 
 	// Footer
@@ -727,18 +751,32 @@ func (m *model) renderCompose(b *strings.Builder) {
 	}
 }
 
+func (m *model) renderGoto(b *strings.Builder) {
+	// Render the list we're coming from
+	if m.prevView == viewInbox {
+		m.renderInbox(b)
+	} else {
+		m.renderArchive(b)
+	}
+
+	// Overlay the modal
+	b.WriteString(titleStyle.Render("\n  Go to:\n"))
+	b.WriteString(titleStyle.Render("    [i] Inbox\n"))
+	b.WriteString(titleStyle.Render("    [a] Archive\n"))
+	b.WriteString(titleStyle.Render("\n  [q] Cancel\n"))
+}
+
 func (m *model) renderHelp(b *strings.Builder) {
 	helpText := `
-Views (from inbox):
-  i         Inbox
-  u         Unread (same as inbox)
-  r         Archive
-  c         Compose
+Go to:
+  g         Show goto menu
+  g i       Go to Inbox
+  g a       Go to Archive
   ?         Toggle this help
 
 List navigation:
   j/k/↑/↓   Navigate
-  g/G       Top/bottom
+  G         Bottom
 
 List actions:
   Enter     View message
@@ -765,15 +803,17 @@ func (m *model) renderFooter(b *strings.Builder) {
 	footer := ""
 	switch m.view {
 	case viewInbox:
-		footer = "i:inbox u:unread r:archive | j/k:up/down enter:view a:archive c:compose q:quit ?:help"
+		footer = "g:go-to | j/k:up/down enter:view a:archive c:compose q:quit ?:help"
 	case viewArchive:
-		footer = "i:inbox u:unread | j/k:up/down enter:view a:archive c:compose q:quit ?:help"
+		footer = "g:go-to | j/k:up/down enter:view a:archive c:compose q:quit ?:help"
 	case viewMessage:
 		footer = "r:reply a:archive | q:back ?:help"
 	case viewCompose:
 		footer = "Tab:field Enter:newline Ctrl+J:send | q:cancel"
 	case viewHelp:
 		footer = "q:back"
+	case viewGoto:
+		footer = "i:Inbox a:Archive | q:Cancel"
 	}
 
 	b.WriteString(helpStyle.Render(footer))
