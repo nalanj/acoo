@@ -759,7 +759,7 @@ func (m *model) renderCompose(b *strings.Builder) {
 }
 
 func (m *model) renderGoto(b *strings.Builder) {
-	// Build modal box
+	// Just show the modal, no list behind
 	modalContent := modalStyle.
 		Width(m.width - 10).
 		Align(lipgloss.Center).
@@ -769,20 +769,6 @@ func (m *model) renderGoto(b *strings.Builder) {
 			itemStyle.Render("  a  Archive") + "\n" +
 			dimStyle.Render("  q  Cancel"),
 		)
-
-	// Render the list we're coming from
-	if m.prevView == viewInbox {
-		m.renderInbox(b)
-	} else {
-		m.renderArchive(b)
-	}
-
-	// Position modal in center by moving cursor up
-	// Calculate how many lines up to go to center the modal (modal is ~5 lines)
-	upCount := (m.height - 5) / 2
-	b.WriteString(fmt.Sprintf("\033[%dA", upCount))
-	b.WriteString("\r")
-	b.WriteString(fmt.Sprintf("\033[2C")) // Move right to center roughly
 	b.WriteString(modalContent)
 }
 
